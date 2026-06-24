@@ -1,0 +1,4 @@
+# 결정성 보장: 전 텍스트 LF 고정 (골든 바이트-동일 게이트·FS_SPEC LF 보존)
+* text=auto eol=lf
+*.png binary
+*.ico binary
