@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 
 from harness_core.export.assemble_project import assemble_project
 from harness_core.ir.registry import addable_kinds_by_layer, kind_registry
+from harness_fs.importer import import_project
 from harness_fs.policy import MergeStrategy
 from harness_fs.writer import write_tree
 from harness_llm import credentials
@@ -783,6 +784,11 @@ class BuilderWindow(QMainWindow):
             v.addWidget(f)
 
         v.addStretch(1)
+        imp = QPushButton("기존 폴더 가져오기")
+        imp.setObjectName("addBtn")
+        imp.setCursor(Qt.CursorShape.PointingHandCursor)
+        imp.clicked.connect(self._on_import)
+        v.addWidget(imp)
         combo = QComboBox()
         combo.addItems(["minimal", "harness-only"])
         combo.setCurrentText(self.state.scaffold)
@@ -828,6 +834,25 @@ class BuilderWindow(QMainWindow):
             "생성 완료",
             f"생성 {len(report.created)}개 · 건너뜀 {len(report.skipped)}개\n{dest}",
         )
+
+    def _on_import(self) -> None:
+        src = QFileDialog.getExistingDirectory(self, "기존 프로젝트 루트(.claude 포함) 선택")
+        if not src:
+            return
+        try:
+            ir = import_project(src)
+        except Exception as e:
+            QMessageBox.warning(self, "가져오기 실패", str(e))
+            return
+        n = len(ir.components)
+        if n == 0:
+            QMessageBox.information(self, "가져오기", "인식된 .claude 구성요소가 없습니다.")
+            return
+        ans = QMessageBox.question(
+            self, "가져오기", f"{n}개 구성요소를 불러옵니다. 현재 작업을 대체할까요?"
+        )
+        if ans == QMessageBox.StandardButton.Yes:
+            self.state.load_ir(ir)
 
     # 인앱 LLM (BYO 키) — 키 있을 때만 활성, 없으면 §0.6 복사→붙여넣기 유지 (PM3-C) ---
     def _llm_ready(self) -> bool:
