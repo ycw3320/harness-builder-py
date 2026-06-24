@@ -21,25 +21,53 @@ def test_duplicate_id():
 
 def test_inline_secret():
     ir = safety_first_preset("demo")
-    ir.components.append(McpServer(
-        id="mcp-x", layer="mcp", title="X", involvement="manual-gate", enabled=True,
-        serverName="x", command="node", args=[], env={"TOKEN": "sk-live-12345"}))
+    ir.components.append(
+        McpServer(
+            id="mcp-x",
+            layer="mcp",
+            title="X",
+            involvement="manual-gate",
+            enabled=True,
+            server_name="x",
+            command="node",
+            args=[],
+            env={"TOKEN": "sk-live-12345"},
+        )
+    )
     assert "inline-secret" in _codes(lint_ir(ir))
 
 
 def test_placeholder_ok():
     ir = safety_first_preset("demo")
-    ir.components.append(McpServer(
-        id="mcp-ok", layer="mcp", title="ok", involvement="manual-gate", enabled=True,
-        serverName="ok", command="node", args=[], env={"TOKEN": "${MY_TOKEN}"}))
+    ir.components.append(
+        McpServer(
+            id="mcp-ok",
+            layer="mcp",
+            title="ok",
+            involvement="manual-gate",
+            enabled=True,
+            server_name="ok",
+            command="node",
+            args=[],
+            env={"TOKEN": "${MY_TOKEN}"},
+        )
+    )
     assert "inline-secret" not in _codes(lint_ir(ir))
 
 
 def test_permission_conflict():
     ir = safety_first_preset("demo")
-    ir.components.append(PermissionRule(
-        id="p-allow", layer="permissions", title="a", involvement="manual-gate", enabled=True,
-        action="allow", pattern="Bash(rm -rf:*)"))
+    ir.components.append(
+        PermissionRule(
+            id="p-allow",
+            layer="permissions",
+            title="a",
+            involvement="manual-gate",
+            enabled=True,
+            action="allow",
+            pattern="Bash(rm -rf:*)",
+        )
+    )
     assert "permission-conflict" in _codes(lint_ir(ir))
 
 

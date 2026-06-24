@@ -1,27 +1,32 @@
-"""하네스 정의 IR — pydantic v2 (TS zod 스키마 포팅).
+"""하네스 정의 IR — pydantic v2.
 
-component 6종 discriminated union + 공통 필드(involvement/enabled/intent).
-필드명은 TS/JSON 계약과 동일하게 camelCase 유지(상호운용·골든 동치).
+필드명은 snake_case + camelCase alias(ADR-0002). 속성 접근은 snake_case,
+직렬화/입력은 snake/camel 둘 다 허용(populate_by_name). 산출 바이트는 불변(골든 게이트).
 """
+
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeVar, Union
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 Layer = Literal["context", "permissions", "mcp", "guardrails", "workflow", "verification"]
 Involvement = Literal["auto", "assisted", "manual-gate"]
 PermissionAction = Literal["allow", "ask", "deny"]
 HookEvent = Literal["PreToolUse", "PostToolUse", "SessionStart", "Stop"]
 
+_CFG = ConfigDict(populate_by_name=True, extra="forbid")
+
 
 class Intent(BaseModel):
+    model_config = _CFG
     raw: str
-    compiledBy: Literal["preset", "manual", "llm"]
+    compiled_by: Literal["preset", "manual", "llm"] = Field(alias="compiledBy")
     confidence: float
 
 
 class _Base(BaseModel):
+    model_config = _CFG
     id: str
     layer: Layer
     title: str
@@ -45,7 +50,7 @@ class PermissionRule(_Base):
 
 class McpServer(_Base):
     kind: Literal["mcp-server"] = "mcp-server"
-    serverName: str
+    server_name: str = Field(alias="serverName")
     command: str
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
@@ -54,16 +59,16 @@ class McpServer(_Base):
 class Hook(_Base):
     kind: Literal["hook"] = "hook"
     event: HookEvent
-    matcherTool: str
-    pathGlob: str | None = None
+    matcher_tool: str = Field(alias="matcherTool")
+    path_glob: str | None = Field(default=None, alias="pathGlob")
     action: Literal["deny", "allow", "warn"]
-    scriptName: str
-    scriptBody: str
+    script_name: str = Field(alias="scriptName")
+    script_body: str = Field(alias="scriptBody")
 
 
 class PolicyDoc(_Base):
     kind: Literal["policy-doc"] = "policy-doc"
-    docName: str
+    doc_name: str = Field(alias="docName")
     body: str
 
 
@@ -73,11 +78,11 @@ class SubAgent(_Base):
     description: str
     tools: list[str] = Field(default_factory=list)
     model: str | None = None
-    systemPrompt: str
+    system_prompt: str = Field(alias="systemPrompt")
 
 
 HarnessComponent = Annotated[
-    Union[ProseGuideline, PermissionRule, McpServer, Hook, PolicyDoc, SubAgent],
+    ProseGuideline | PermissionRule | McpServer | Hook | PolicyDoc | SubAgent,
     Field(discriminator="kind"),
 ]
 
@@ -87,33 +92,33 @@ ComponentKind = Literal[
 
 
 class Meta(BaseModel):
-    irVersion: str
-    targetTool: Literal["claude-code"]
+    model_config = _CFG
+    ir_version: str = Field(alias="irVersion")
+    target_tool: Literal["claude-code"] = Field(alias="targetTool")
     preset: str
-    projectName: str
+    project_name: str = Field(alias="projectName")
 
 
 class HarnessIR(BaseModel):
+    model_config = _CFG
     meta: Meta
     components: list[HarnessComponent]
 
 
 _component_adapter: TypeAdapter[object] = TypeAdapter(HarnessComponent)
-_T = TypeVar("_T")
 
 
 def by_kind(comps: list, kind: str) -> list:
-    """특정 kind 의 component 만 추출 (TS byKind 직역)."""
+    """특정 kind 의 component 만 추출."""
     return [c for c in comps if c.kind == kind]
 
 
 def parse_component(data: dict):
-    """검증 후 component 반환 (실패 시 ValidationError)."""
     return _component_adapter.validate_python(data)
 
 
 def safe_parse_component(data: dict) -> dict:
-    """zod safeParse 시맨틱 재현 — {ok, data} 또는 {ok: False, errors}."""
+    """zod safeParse 시맨틱 — {ok, data} 또는 {ok: False, errors}."""
     try:
         return {"ok": True, "data": _component_adapter.validate_python(data)}
     except ValidationError as e:

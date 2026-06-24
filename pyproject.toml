@@ -24,3 +24,12 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+# 한국어 콘텐츠 문자열(프리셋·템플릿·메시지)은 줄바꿈 시 가독성·골든 바이트 위험 → E501 예외
+[tool.ruff.lint.per-file-ignores]
+"harness_core/ir/presets.py" = ["E501"]
+"harness_core/export/scaffold_templates.py" = ["E501"]
+"harness_core/lint/lint.py" = ["E501"]
