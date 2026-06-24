@@ -1,21 +1,22 @@
 """표시용 view-model — 상태·코어에서 화면 데이터를 파생 (프레임워크 무의존).
 
 두 셸(Flet/Qt)이 동일하게 소비한다 → 위젯 배선만 갈리고 로직은 공유(M6 LOC 공정).
+PM3-B: 전 6계층 interactive, kind별 field_specs(데이터 구동 폼), 행별 필드 가이드.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from harness_core.export.assemble_project import assemble_project
 from harness_core.lint.lint import lint_ir
 from harness_core.sim.simulate import default_scenarios, simulate
 
-from .guides import involvement_meta, layer_intros, layer_meta, layer_order
+from .guides import guidance_for, involvement_meta, layer_intros, layer_meta, layer_order
 from .state import BuilderState
 
-# 이 수직 슬라이스에서 실제 편집 동작하는 계층 (S2: context만)
-SLICE_ACTIVE_LAYER = "context"
+# 결정방식(involvement) 콤보 옵션 — (라벨, 키)
+INVOLVEMENT_OPTIONS = [(meta["label"], key) for key, meta in involvement_meta.items()]
 
 
 @dataclass(frozen=True)
@@ -23,10 +24,21 @@ class NavItemVM:
     layer: str
     label: str
     hint: str
-    interactive: bool  # 슬라이스에서 클릭 가능 여부
+    interactive: bool  # 클릭 가능 여부(PM3-B: 전 계층 True)
     selected: bool
     count: int  # enabled component 수
     dot_color: str  # 내용 있음(녹)/없음(회)
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    """kind별 편집 필드 1개 — 위젯 종류로 데이터 구동 렌더(서브클래스 6종 회피)."""
+
+    name: str  # 스키마 필드명(snake_case)
+    label: str
+    widget: str  # line | textarea | combo | list | dict
+    options: tuple[str, ...] = ()  # combo 용
+    placeholder: str = ""
 
 
 @dataclass(frozen=True)
@@ -38,9 +50,8 @@ class RowVM:
     involvement_label: str
     color: str
     enabled: bool
-    # 펼침 편집 필드 (prose 슬라이스: heading/body)
-    heading: str | None
-    body: str | None
+    values: dict = field(default_factory=dict)  # 편집 필드 현재값(model_dump)
+    guide: dict | None = None  # {purpose, produces, ask, examples}
 
 
 @dataclass(frozen=True)
@@ -64,6 +75,48 @@ _OUTCOME_LABEL = {
     "allowed": "통과",
 }
 
+# kind별 편집 필드 스펙 (스키마 필드와 1:1). id/layer/involvement/enabled/title 은 공통 처리.
+_SPECS: dict[str, list[FieldSpec]] = {
+    "prose-guideline": [
+        FieldSpec("scope", "범위", "combo", ("project", "global")),
+        FieldSpec("heading", "섹션 제목", "line"),
+        FieldSpec("body", "본문", "textarea", placeholder="외부 LLM 답변을 붙여넣으세요…"),
+    ],
+    "permission-rule": [
+        FieldSpec("action", "동작", "combo", ("allow", "ask", "deny")),
+        FieldSpec("pattern", "패턴", "line", placeholder="Bash(rm -rf:*)"),
+    ],
+    "mcp-server": [
+        FieldSpec("server_name", "서버 이름", "line", placeholder="github"),
+        FieldSpec("command", "실행 명령", "line", placeholder="npx"),
+        FieldSpec("args", "인자", "list"),
+        FieldSpec("env", "환경변수 (${VAR} 플레이스홀더만)", "dict"),
+    ],
+    "hook": [
+        FieldSpec("event", "시점", "combo", ("PreToolUse", "PostToolUse", "SessionStart", "Stop")),
+        FieldSpec("matcher_tool", "대상 도구", "line", placeholder="Write|Edit"),
+        FieldSpec("path_glob", "경로 glob(선택)", "line", placeholder="**/.env*"),
+        FieldSpec("action", "동작", "combo", ("deny", "allow", "warn")),
+        FieldSpec("script_name", "스크립트 파일", "line", placeholder="block-secrets.sh"),
+        FieldSpec("script_body", "스크립트 본문 (exit 2=차단)", "textarea"),
+    ],
+    "policy-doc": [
+        FieldSpec("doc_name", "문서 파일", "line", placeholder="secrets.md"),
+        FieldSpec("body", "본문", "textarea"),
+    ],
+    "sub-agent": [
+        FieldSpec("name", "이름", "line", placeholder="code-reviewer"),
+        FieldSpec("description", "설명(언제 부르는지)", "line"),
+        FieldSpec("tools", "도구", "list"),
+        FieldSpec("model", "모델(선택)", "line"),
+        FieldSpec("system_prompt", "시스템 프롬프트", "textarea"),
+    ],
+}
+
+
+def field_specs(kind: str) -> list[FieldSpec]:
+    return _SPECS.get(kind, [])
+
 
 def nav_items(state: BuilderState) -> list[NavItemVM]:
     items: list[NavItemVM] = []
@@ -75,7 +128,7 @@ def nav_items(state: BuilderState) -> list[NavItemVM]:
                 layer=layer,
                 label=meta["label"],
                 hint=meta["hint"],
-                interactive=(layer == SLICE_ACTIVE_LAYER),
+                interactive=True,
                 selected=(layer == state.selected_layer),
                 count=count,
                 dot_color="#1a7f37" if count else "#8c959f",
@@ -90,6 +143,15 @@ def rows_for_selected(state: BuilderState) -> list[RowVM]:
         if c.layer != state.selected_layer:
             continue
         inv = involvement_meta[c.involvement]
+        g = guidance_for(c)
+        guide = None
+        if g is not None:
+            guide = {
+                "purpose": g.purpose,
+                "produces": g.produces_file,
+                "ask": g.ask_llm_template,
+                "examples": list(g.good_examples),
+            }
         rows.append(
             RowVM(
                 id=c.id,
@@ -99,8 +161,8 @@ def rows_for_selected(state: BuilderState) -> list[RowVM]:
                 involvement_label=inv["label"],
                 color=inv["color"],
                 enabled=c.enabled,
-                heading=getattr(c, "heading", None),
-                body=getattr(c, "body", None),
+                values=c.model_dump(by_alias=False),
+                guide=guide,
             )
         )
     return rows
