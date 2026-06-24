@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from harness_core.export.assemble_project import assemble_project
+from harness_core.ir.enforcement import promote
 from harness_core.ir.registry import addable_kinds_by_layer, kind_registry
 from harness_fs.importer import import_project
 from harness_fs.policy import MergeStrategy
@@ -335,13 +336,20 @@ class RowWidget(QFrame):
     COLLAPSED = 44
 
     def __init__(
-        self, row: vm.RowVM, state: BuilderState, tokens: dict, is_dark: bool, llm_fill=None
+        self,
+        row: vm.RowVM,
+        state: BuilderState,
+        tokens: dict,
+        is_dark: bool,
+        llm_fill=None,
+        promote_fn=None,
     ) -> None:
         super().__init__()
         self.setObjectName("rowCard")
         self._row = row
         self._state = state
         self._llm_fill = llm_fill  # (kind, comp_id) 콜백 — 키 있을 때만 전달
+        self._promote = promote_fn  # (comp_id) 콜백 — 강제수준 승격
         self._open = False
         self.setMinimumHeight(self.COLLAPSED)
         self.setMaximumHeight(self.COLLAPSED)
@@ -370,6 +378,11 @@ class RowWidget(QFrame):
         kind_lbl = QLabel(row.kind)
         kind_lbl.setObjectName("faint")
         header.addWidget(kind_lbl)
+        if row.enforcement:
+            enf = QLabel(f"· {row.enforcement}")
+            enf.setObjectName("faint")
+            enf.setToolTip("강제수준: 프로즈(권고) < 정책문서(문서) < hook(자동 차단)")
+            header.addWidget(enf)
         for label, tip, fixed, fn in (
             ("↑", "위로", True, lambda: self._state.move(self._row.id, "up")),
             ("↓", "아래로", True, lambda: self._state.move(self._row.id, "down")),
@@ -487,6 +500,13 @@ class RowWidget(QFrame):
             ai.setCursor(Qt.CursorShape.PointingHandCursor)
             ai.clicked.connect(lambda: self._llm_fill(self._row.kind, self._row.id))
             head.addWidget(ai)
+        if self._promote is not None and self._row.promotable:
+            up = QPushButton("강제수준 ↑")
+            up.setObjectName("addBtn")
+            up.setToolTip("같은 의도를 더 강하게 집행(프로즈→정책문서→hook)")
+            up.setCursor(Qt.CursorShape.PointingHandCursor)
+            up.clicked.connect(lambda: self._promote(self._row.id))
+            head.addWidget(up)
         copy = QPushButton("프롬프트 복사")
         copy.setObjectName("addBtn")
         copy.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -694,7 +714,7 @@ class BuilderWindow(QMainWindow):
         fill = self._llm_fill_component if self._llm_ready() else None
         self._rows: list[RowWidget] = []
         for r in vm.rows_for_selected(self.state):
-            rw = RowWidget(r, self.state, self.tokens, self.is_dark, fill)
+            rw = RowWidget(r, self.state, self.tokens, self.is_dark, fill, self._promote_component)
             self._rows.append(rw)
             rows_lay.addWidget(rw)
         rows_lay.addStretch(1)
@@ -881,6 +901,21 @@ class BuilderWindow(QMainWindow):
         )
         if ans == QMessageBox.StandardButton.Yes:
             self.state.load_ir(ir)
+
+    def _promote_component(self, comp_id: str) -> None:
+        comp = next((c for c in self.state.ir.components if c.id == comp_id), None)
+        if comp is None:
+            return
+        promoted = promote(comp)
+        if promoted is None:
+            QMessageBox.information(self, "강제수준", "이미 최고 강제수준(자동 차단)입니다.")
+            return
+        self.state.replace(comp_id, promoted)
+        self.state.set_selected_layer(promoted.layer)  # 승격 결과(가드레일)가 보이도록
+        for rw in self._rows:
+            if rw._row.id == promoted.id:
+                rw.set_open(True)
+                break
 
     # 인앱 LLM (BYO 키) — 키 있을 때만 활성, 없으면 §0.6 복사→붙여넣기 유지 (PM3-C) ---
     def _llm_ready(self) -> bool:

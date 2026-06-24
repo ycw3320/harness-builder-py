@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from harness_core.export.assemble_project import assemble_project
+from harness_core.ir.enforcement import can_promote, enforcement_level
 from harness_core.lint.lint import lint_ir
 from harness_core.sim.simulate import default_scenarios, simulate
 
@@ -52,6 +53,8 @@ class RowVM:
     enabled: bool
     values: dict = field(default_factory=dict)  # 편집 필드 현재값(model_dump)
     guide: dict | None = None  # {purpose, produces, ask, examples}
+    enforcement: str | None = None  # 강제수준 라벨(권고/문서/자동 차단)
+    promotable: bool = False  # 강제수준 한 단계 승격 가능 여부
 
 
 @dataclass(frozen=True)
@@ -194,6 +197,8 @@ def rows_for_selected(state: BuilderState) -> list[RowVM]:
                 enabled=c.enabled,
                 values=c.model_dump(by_alias=False),
                 guide=guide,
+                enforcement=enforcement_level(c.kind),
+                promotable=can_promote(c.kind),
             )
         )
     return rows

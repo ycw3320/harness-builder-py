@@ -97,6 +97,10 @@ class BuilderState:
         self.selected_file = None
         self._notify()
 
+    def replace(self, comp_id: str, new_comp: HarnessComponent) -> None:
+        """같은 위치에서 컴포넌트 교체(강제수준 승격 등)."""
+        self._set_components([new_comp if c.id == comp_id else c for c in self.ir.components])
+
     # CRUD ---
     def add_component(self, kind: ComponentKind) -> None:
         comp = create_component(kind, self.selected_layer)
