@@ -16,13 +16,18 @@ def test_env_write_blocked_by_hook():
 
 
 def test_forcepush_ask():
-    r = simulate(safety_first_preset("demo"), {"tool": "Bash", "command": "git push --force origin main", "label": "x"})
+    r = simulate(
+        safety_first_preset("demo"),
+        {"tool": "Bash", "command": "git push --force origin main", "label": "x"},
+    )
     assert r["outcome"] == "ask"
     assert r["blockedBy"] == "perm-ask-forcepush"
 
 
 def test_build_allowed():
-    r = simulate(safety_first_preset("demo"), {"tool": "Bash", "command": "npm run build", "label": "x"})
+    r = simulate(
+        safety_first_preset("demo"), {"tool": "Bash", "command": "npm run build", "label": "x"}
+    )
     assert r["outcome"] == "allowed"
 
 

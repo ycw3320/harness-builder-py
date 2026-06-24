@@ -1,4 +1,5 @@
-"""결정론 시뮬레이터 (TS simulate.ts 포팅) — LLM 0회. hook→deny→ask→allow 우선순위."""
+"""결정론 시뮬레이터 — LLM 0회. hook→deny→ask→allow 우선순위."""
+
 from __future__ import annotations
 
 import re
@@ -32,22 +33,32 @@ def simulate(ir: HarnessIR, action: dict) -> dict:
     for h in by_kind(enabled, "hook"):
         if h.event != "PreToolUse" or h.action != "deny":
             continue
-        if not re.search(h.matcherTool, action["tool"]):
+        if not re.search(h.matcher_tool, action["tool"]):
             continue
-        if h.pathGlob:
+        if h.path_glob:
             path = action.get("path")
-            if not path or not glob_to_regexp(h.pathGlob).search(path):
+            if not path or not glob_to_regexp(h.path_glob).search(path):
                 continue
-        suffix = f" · {h.pathGlob}" if h.pathGlob else ""
-        reasons.append(f'hook "{h.title}" 의 matcher({h.matcherTool}{suffix})에 걸려 차단됨')
-        return {"action": action, "outcome": "blocked-by-hook", "reasons": reasons, "blockedBy": h.id}
+        suffix = f" · {h.path_glob}" if h.path_glob else ""
+        reasons.append(f'hook "{h.title}" 의 matcher({h.matcher_tool}{suffix})에 걸려 차단됨')
+        return {
+            "action": action,
+            "outcome": "blocked-by-hook",
+            "reasons": reasons,
+            "blockedBy": h.id,
+        }
 
     # 2. permission deny / ask
     perms = by_kind(enabled, "permission-rule")
     for p in [x for x in perms if x.action == "deny"]:
         if _permission_matches(p.pattern, action):
             reasons.append(f'권한 deny 규칙 "{p.pattern}" 에 매칭되어 차단됨')
-            return {"action": action, "outcome": "blocked-by-permission", "reasons": reasons, "blockedBy": p.id}
+            return {
+                "action": action,
+                "outcome": "blocked-by-permission",
+                "reasons": reasons,
+                "blockedBy": p.id,
+            }
     for p in [x for x in perms if x.action == "ask"]:
         if _permission_matches(p.pattern, action):
             reasons.append(f'권한 ask 규칙 "{p.pattern}" 에 매칭되어 사용자 확인 필요')

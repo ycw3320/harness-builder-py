@@ -3,6 +3,7 @@
 minimal: <projectName>/ 루트 + 골격 + _APPLY/. harness-only: 루트 + _APPLY/.
 전역 지침(_global/CLAUDE.md)은 항상 _APPLY/ 로 분리.
 """
+
 from __future__ import annotations
 
 from ..ir.schema import HarnessIR
@@ -16,7 +17,7 @@ from .scaffold_templates import (
 
 
 def assemble_project(ir: HarnessIR, scaffold: str = "minimal") -> list[VirtualFile]:
-    project_name = ir.meta.projectName or "my-project"
+    project_name = ir.meta.project_name or "my-project"
     minimal = scaffold == "minimal"
     prefix = f"{project_name}/" if minimal else ""
 

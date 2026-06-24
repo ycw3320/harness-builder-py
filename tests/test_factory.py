@@ -7,7 +7,7 @@ from harness_core.ir.schema import parse_component
 
 @pytest.mark.parametrize("kind", list(kind_registry.keys()))
 def test_create_component(kind):
-    c = create_component(kind, kind_registry[kind]["defaultLayer"])
+    c = create_component(kind, kind_registry[kind]["default_layer"])
     assert c.kind == kind
     assert c.enabled is True
     parse_component(c.model_dump())  # 재검증: 생성물이 schema 통과

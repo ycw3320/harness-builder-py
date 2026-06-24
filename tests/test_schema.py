@@ -11,10 +11,18 @@ def test_preset_roundtrip():
 
 
 def test_safe_parse_ok():
-    res = safe_parse_component({
-        "id": "x", "kind": "permission-rule", "layer": "permissions", "title": "t",
-        "involvement": "manual-gate", "enabled": True, "action": "deny", "pattern": "Bash(x:*)",
-    })
+    res = safe_parse_component(
+        {
+            "id": "x",
+            "kind": "permission-rule",
+            "layer": "permissions",
+            "title": "t",
+            "involvement": "manual-gate",
+            "enabled": True,
+            "action": "deny",
+            "pattern": "Bash(x:*)",
+        }
+    )
     assert res["ok"] is True
 
 
