@@ -5,7 +5,7 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from harness_app.qt_shell.app import RowWidget, make_app
+from harness_app.qt_shell.app import make_app
 
 app, win = make_app()
 theme = sys.argv[2] if len(sys.argv) > 2 else "light"
@@ -18,8 +18,8 @@ app.processEvents()
 if win._rows:
     r0 = win._rows[0]
     r0.set_open(True)
-    r0.setMinimumHeight(RowWidget.EXPANDED)
-    r0.setMaximumHeight(RowWidget.EXPANDED)
+    r0.setMinimumHeight(r0._expanded)
+    r0.setMaximumHeight(r0._expanded)
 for _ in range(10):
     app.processEvents()
 win.repaint()

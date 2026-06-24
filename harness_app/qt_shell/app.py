@@ -153,6 +153,8 @@ QPushButton#addBtn {
 }
 QPushButton#addBtn:hover { border: 1px solid $accent; color: $accent; }
 
+QFrame#guideBox { background: $surface_alt; border: 1px solid $border; border-radius: 8px; }
+
 QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { margin: 2px 4px; border-radius: 8px; }
 QListWidget::item:selected { background: $selected_bg; }
@@ -177,6 +179,9 @@ def _rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+_FIELD_H = {"textarea": 120, "list": 104, "dict": 104}  # 펼침 높이 추정용(위젯별)
+
+
 def _dot(color: str, size: int = 10) -> QLabel:
     d = QLabel()
     d.setFixedSize(size, size)
@@ -184,12 +189,126 @@ def _dot(color: str, size: int = 10) -> QLabel:
     return d
 
 
+class ListEditor(QWidget):
+    """문자열 리스트 편집(인자·도구) — 변경 시 on_change(list) 콜백. 초기 로드 중엔 미통지."""
+
+    def __init__(self, values: list, on_change) -> None:
+        super().__init__()
+        self._on_change = on_change
+        self._loading = True
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(4)
+        self._rows_box = QVBoxLayout()
+        self._rows_box.setContentsMargins(0, 0, 0, 0)
+        self._rows_box.setSpacing(4)
+        outer.addLayout(self._rows_box)
+        self._edits: list[QLineEdit] = []
+        for v in values or []:
+            self._add_row(str(v))
+        add = QPushButton("+ 항목 추가")
+        add.setObjectName("addBtn")
+        add.setCursor(Qt.CursorShape.PointingHandCursor)
+        add.clicked.connect(lambda: self._add_row(""))
+        outer.addWidget(add)
+        self._loading = False
+
+    def _add_row(self, value: str) -> None:
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(6)
+        le = QLineEdit(value)
+        le.textChanged.connect(self._emit)
+        rm = QPushButton("삭제")
+        rm.setObjectName("crudBtn")
+        rm.clicked.connect(lambda: self._remove(row, le))
+        h.addWidget(le)
+        h.addWidget(rm)
+        self._edits.append(le)
+        self._rows_box.addWidget(row)
+        self._emit()
+
+    def _remove(self, row: QWidget, le: QLineEdit) -> None:
+        if le in self._edits:
+            self._edits.remove(le)
+        row.setParent(None)
+        row.deleteLater()
+        self._emit()
+
+    def _emit(self) -> None:
+        if not self._loading:
+            self._on_change([e.text() for e in self._edits if e.text().strip()])
+
+
+class DictEditor(QWidget):
+    """문자열 dict 편집(env) — 변경 시 on_change(dict) 콜백. 초기 로드 중엔 미통지."""
+
+    def __init__(self, values: dict, on_change) -> None:
+        super().__init__()
+        self._on_change = on_change
+        self._loading = True
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(4)
+        self._rows_box = QVBoxLayout()
+        self._rows_box.setContentsMargins(0, 0, 0, 0)
+        self._rows_box.setSpacing(4)
+        outer.addLayout(self._rows_box)
+        self._pairs: list[tuple[QLineEdit, QLineEdit]] = []
+        for k, val in (values or {}).items():
+            self._add_row(str(k), str(val))
+        add = QPushButton("+ 변수 추가")
+        add.setObjectName("addBtn")
+        add.setCursor(Qt.CursorShape.PointingHandCursor)
+        add.clicked.connect(lambda: self._add_row("", ""))
+        outer.addWidget(add)
+        self._loading = False
+
+    def _add_row(self, key: str, val: str) -> None:
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(6)
+        k_le = QLineEdit(key)
+        k_le.setPlaceholderText("KEY")
+        v_le = QLineEdit(val)
+        v_le.setPlaceholderText("${VAR}")
+        k_le.textChanged.connect(self._emit)
+        v_le.textChanged.connect(self._emit)
+        rm = QPushButton("삭제")
+        rm.setObjectName("crudBtn")
+        rm.clicked.connect(lambda: self._remove(row, (k_le, v_le)))
+        h.addWidget(k_le)
+        h.addWidget(v_le)
+        h.addWidget(rm)
+        self._pairs.append((k_le, v_le))
+        self._rows_box.addWidget(row)
+        self._emit()
+
+    def _remove(self, row: QWidget, pair: tuple) -> None:
+        if pair in self._pairs:
+            self._pairs.remove(pair)
+        row.setParent(None)
+        row.deleteLater()
+        self._emit()
+
+    def _emit(self) -> None:
+        if self._loading:
+            return
+        d: dict[str, str] = {}
+        for k_le, v_le in self._pairs:
+            k = k_le.text().strip()
+            if k:
+                d[k] = v_le.text()
+        self._on_change(d)
+
+
 class RowWidget(QFrame):
-    """컴팩트 행 — 클릭 시 펼쳐 heading/body 편집. 접힘 시 편집부 숨김(겹침 방지)."""
+    """컴팩트 행 — 클릭 시 펼쳐 kind별 폼 편집(field_specs 구동). 접힘 시 편집부 숨김."""
 
     HEADER_H = 34
     COLLAPSED = 44
-    EXPANDED = 210
 
     def __init__(self, row: vm.RowVM, state: BuilderState, tokens: dict, is_dark: bool) -> None:
         super().__init__()
@@ -221,10 +340,9 @@ class RowWidget(QFrame):
             f"border-radius: 9px; padding: 1px 9px; font-size: 11px; font-weight: 600;"
         )
         header.addWidget(pill)
-        kind = QLabel(row.kind)
-        kind.setObjectName("faint")
-        header.addWidget(kind)
-        # 행 CRUD 컨트롤 (위/아래/복제/삭제) — 버튼이 클릭을 소비해 펼침 토글과 분리됨
+        kind_lbl = QLabel(row.kind)
+        kind_lbl.setObjectName("faint")
+        header.addWidget(kind_lbl)
         for label, tip, fixed, fn in (
             ("↑", "위로", True, lambda: self._state.move(self._row.id, "up")),
             ("↓", "아래로", True, lambda: self._state.move(self._row.id, "down")),
@@ -241,60 +359,138 @@ class RowWidget(QFrame):
             header.addWidget(b)
         outer.addWidget(self._header_w)
 
-        # 편집부 — PM3-A: prose 만 인라인 편집(전 kind 폼은 PM3-B)
-        self._is_prose = row.kind == "prose-guideline"
-        self._editor: QWidget | None = None
-        if self._is_prose:
-            self._editor = QWidget()
-            ed = QVBoxLayout(self._editor)
-            ed.setContentsMargins(0, 0, 0, 0)
-            ed.setSpacing(5)
-            self._heading = QLineEdit(row.heading or "")
-            self._heading.setPlaceholderText("섹션 제목")
-            self._heading.textChanged.connect(self._on_heading)
-            ed.addWidget(self._heading)
-            self._body = QPlainTextEdit(row.body or "")
-            self._body.setPlaceholderText("외부 LLM 답변을 여기에 붙여넣으세요…")
-            self._body.setMinimumHeight(104)
-            self._body.textChanged.connect(self._on_body)
-            ed.addWidget(self._body)
-            self._editor.setVisible(False)
-            outer.addWidget(self._editor)
+        specs = vm.field_specs(row.kind)
+        self._editor = self._build_editor(row, specs)
+        self._editor.setVisible(False)
+        outer.addWidget(self._editor)
+
+        exp = self.HEADER_H + 100  # 제목 + 결정방식 + 여백
+        for s in specs:
+            exp += _FIELD_H.get(s.widget, 44)
+        if row.guide:
+            exp += 116
+        self._expanded = min(740, exp)
 
         self._anim = QPropertyAnimation(self, b"maximumHeight")
         self._anim.setDuration(170)
         self._anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
         self._anim.finished.connect(self._on_anim_done)
 
+    # 편집 폼 구성 (값 설정 후 시그널 연결 → 초기 patch 폭주 방지) ---
+    def _build_editor(self, row: vm.RowVM, specs: list) -> QWidget:
+        editor = QWidget()
+        ed = QVBoxLayout(editor)
+        ed.setContentsMargins(0, 0, 0, 0)
+        ed.setSpacing(6)
+
+        title_le = QLineEdit(row.title)
+        title_le.setPlaceholderText("제목")
+        title_le.textChanged.connect(lambda t: self._patch("title", t))
+        ed.addWidget(self._labeled("제목", title_le))
+
+        inv_combo = QComboBox()
+        inv_keys = []
+        for lab, key in vm.INVOLVEMENT_OPTIONS:
+            inv_combo.addItem(lab)
+            inv_keys.append(key)
+        inv_combo.setCurrentIndex(inv_keys.index(row.involvement))
+        inv_combo.currentIndexChanged.connect(lambda i: self._patch("involvement", inv_keys[i]))
+        ed.addWidget(self._labeled("결정방식", inv_combo))
+
+        for s in specs:
+            ed.addWidget(self._labeled(s.label, self._field_widget(s, row.values.get(s.name))))
+
+        if row.guide:
+            ed.addWidget(self._guide_box(row.guide))
+        return editor
+
+    def _labeled(self, label: str, widget: QWidget) -> QWidget:
+        box = QWidget()
+        v = QVBoxLayout(box)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+        lab = QLabel(label)
+        lab.setObjectName("faint")
+        v.addWidget(lab)
+        v.addWidget(widget)
+        return box
+
+    def _field_widget(self, spec, value) -> QWidget:
+        name = spec.name
+        if spec.widget == "textarea":
+            te = QPlainTextEdit(value or "")
+            te.setPlaceholderText(spec.placeholder)
+            te.setMinimumHeight(84)
+            te.textChanged.connect(lambda: self._patch(name, te.toPlainText()))
+            return te
+        if spec.widget == "combo":
+            cb = QComboBox()
+            cb.addItems(list(spec.options))
+            if value in spec.options:
+                cb.setCurrentText(value)
+            cb.currentTextChanged.connect(lambda t: self._patch(name, t))
+            return cb
+        if spec.widget == "list":
+            return ListEditor(value or [], lambda v: self._patch(name, v))
+        if spec.widget == "dict":
+            return DictEditor(value or {}, lambda v: self._patch(name, v))
+        le = QLineEdit("" if value is None else str(value))
+        le.setPlaceholderText(spec.placeholder)
+        le.textChanged.connect(lambda t: self._patch(name, t))
+        return le
+
+    def _guide_box(self, guide: dict) -> QWidget:
+        box = QFrame()
+        box.setObjectName("guideBox")
+        v = QVBoxLayout(box)
+        v.setContentsMargins(10, 8, 10, 8)
+        v.setSpacing(4)
+        purpose = QLabel(f"무엇 · {guide['purpose']}")
+        purpose.setObjectName("muted")
+        purpose.setWordWrap(True)
+        v.addWidget(purpose)
+        head = QHBoxLayout()
+        lab = QLabel("외부 LLM에 이렇게 요청")
+        lab.setObjectName("section")
+        head.addWidget(lab)
+        head.addStretch(1)
+        copy = QPushButton("프롬프트 복사")
+        copy.setObjectName("addBtn")
+        copy.setCursor(Qt.CursorShape.PointingHandCursor)
+        copy.clicked.connect(lambda: QApplication.clipboard().setText(guide["ask"]))
+        head.addWidget(copy)
+        head_w = QWidget()
+        head_w.setLayout(head)
+        v.addWidget(head_w)
+        ask = QLabel(guide["ask"])
+        ask.setObjectName("faint")
+        ask.setWordWrap(True)
+        v.addWidget(ask)
+        return box
+
+    def _patch(self, name: str, value) -> None:
+        self._state.patch(self._row.id, {name: value})
+
     def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt 시그니처)
-        if self._is_prose and self._header_w.geometry().contains(event.position().toPoint()):
+        if self._header_w.geometry().contains(event.position().toPoint()):
             self.toggle()
         super().mousePressEvent(event)
 
     def set_open(self, value: bool) -> None:
-        if self._editor is None:
-            return
         self._open = value
         if value:
             self._editor.setVisible(True)
         self._anim.stop()
         self._anim.setStartValue(self.maximumHeight())
-        self._anim.setEndValue(self.EXPANDED if value else self.COLLAPSED)
+        self._anim.setEndValue(self._expanded if value else self.COLLAPSED)
         self._anim.start()
 
     def _on_anim_done(self) -> None:
-        if not self._open and self._editor is not None:
+        if not self._open:
             self._editor.setVisible(False)
 
     def toggle(self) -> None:
-        if self._editor is not None:
-            self.set_open(not self._open)
-
-    def _on_heading(self, text: str) -> None:
-        self._state.patch(self._row.id, {"heading": text})
-
-    def _on_body(self) -> None:
-        self._state.patch(self._row.id, {"body": self._body.toPlainText()})
+        self.set_open(not self._open)
 
 
 class BuilderWindow(QMainWindow):
@@ -353,7 +549,8 @@ class BuilderWindow(QMainWindow):
         return (
             self.theme_name,
             self.state.selected_layer,
-            tuple((c.id, c.enabled) for c in self.state.ir.components),
+            self.state.advanced_mode,
+            tuple((c.id, c.enabled, c.involvement) for c in self.state.ir.components),
         )
 
     def _on_change(self) -> None:
@@ -490,19 +687,17 @@ class BuilderWindow(QMainWindow):
         return track
 
     def _add_bar(self) -> QWidget:
-        """선택 계층의 기본 추가 가능 kind 버튼 — 동적 추가(요구 1)."""
+        """선택 계층의 추가 가능 kind 버튼 — 동적 추가(요구 1). 고급 토글로 advanced kind 노출."""
         bar = QWidget()
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
-        entries = [
-            e for e in addable_kinds_by_layer.get(self.state.selected_layer, []) if e["basic"]
-        ]
-        if not entries:
-            return bar
-        lbl = QLabel("추가:")
-        lbl.setObjectName("muted")
-        lay.addWidget(lbl)
+        all_entries = addable_kinds_by_layer.get(self.state.selected_layer, [])
+        entries = [e for e in all_entries if e["basic"] or self.state.advanced_mode]
+        if entries:
+            lbl = QLabel("추가:")
+            lbl.setObjectName("muted")
+            lay.addWidget(lbl)
         for entry in entries:
             kind = entry["kind"]
             b = QPushButton(f"+ {kind_registry[kind]['label']}")
@@ -511,6 +706,14 @@ class BuilderWindow(QMainWindow):
             b.clicked.connect(lambda _checked, k=kind: self.state.add_component(k))
             lay.addWidget(b)
         lay.addStretch(1)
+        if any(not e["basic"] for e in all_entries):
+            adv = QPushButton("고급")
+            adv.setObjectName("segBtn")
+            adv.setCheckable(True)
+            adv.setChecked(self.state.advanced_mode)
+            adv.setCursor(Qt.CursorShape.PointingHandCursor)
+            adv.clicked.connect(lambda: self.state.set_advanced_mode(not self.state.advanced_mode))
+            lay.addWidget(adv)
         return bar
 
     # 우 패널 (S5/S6) + 테마 토글 ---
