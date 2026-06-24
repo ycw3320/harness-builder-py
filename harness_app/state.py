@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Literal
 
 from harness_core.ir.factory import create_component, gen_id
-from harness_core.ir.presets import safety_first_preset
+from harness_core.ir.presets import PRESETS
 from harness_core.ir.schema import (
     ComponentKind,
     HarnessComponent,
@@ -22,6 +22,7 @@ from harness_core.ir.schema import (
 Scaffold = Literal["minimal", "harness-only"]
 Direction = Literal["up", "down"]
 Scope = Literal["global", "project"]
+PresetName = Literal["minimal", "safety-first"]
 
 
 def group_key(c: HarnessComponent) -> str:
@@ -33,9 +34,12 @@ def group_key(c: HarnessComponent) -> str:
 class BuilderState:
     """변경 시마다 새 IR + 구독자 통지. id 인자는 component.id."""
 
-    def __init__(self, project_name: str = "my-project") -> None:
+    def __init__(
+        self, project_name: str = "my-project", preset: PresetName = "safety-first"
+    ) -> None:
         self._project_name = project_name
-        self.ir: HarnessIR = safety_first_preset(project_name)
+        self._preset: PresetName = preset
+        self.ir: HarnessIR = PRESETS[preset](project_name)
         self.selected_layer: Layer = "context"
         self.selected_file: str | None = None
         self.advanced_mode: bool = False
@@ -79,8 +83,11 @@ class BuilderState:
         self.scaffold = scaffold
         self._notify()
 
-    def load_preset(self) -> None:
-        self.ir = safety_first_preset(self._project_name)
+    def load_preset(self, name: PresetName | None = None) -> None:
+        """프리셋 적용. name 생략 시 현재 프리셋 재적용."""
+        if name is not None:
+            self._preset = name
+        self.ir = PRESETS[self._preset](self._project_name)
         self.selected_file = None
         self._notify()
 

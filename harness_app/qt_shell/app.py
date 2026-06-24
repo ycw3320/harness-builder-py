@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from harness_core.export.assemble_project import assemble_project
+from harness_core.ir.registry import addable_kinds_by_layer, kind_registry
 from harness_fs.policy import MergeStrategy
 from harness_fs.writer import write_tree
 
@@ -141,6 +142,17 @@ QPushButton#segBtn {
 }
 QPushButton#segBtn:checked { background: $surface; color: $text; }
 
+QPushButton#crudBtn {
+    background: transparent; color: $text_muted; border: none;
+    border-radius: 5px; padding: 2px 7px; font-size: 12px;
+}
+QPushButton#crudBtn:hover { background: $surface_alt; color: $text; }
+QPushButton#addBtn {
+    background: $surface_alt; color: $text; border: 1px solid $border;
+    border-radius: 7px; padding: 6px 12px; font-size: 12px; font-weight: 600;
+}
+QPushButton#addBtn:hover { border: 1px solid $accent; color: $accent; }
+
 QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { margin: 2px 4px; border-radius: 8px; }
 QListWidget::item:selected { background: $selected_bg; }
@@ -212,23 +224,42 @@ class RowWidget(QFrame):
         kind = QLabel(row.kind)
         kind.setObjectName("faint")
         header.addWidget(kind)
+        # 행 CRUD 컨트롤 (위/아래/복제/삭제) — 버튼이 클릭을 소비해 펼침 토글과 분리됨
+        for label, tip, fixed, fn in (
+            ("↑", "위로", True, lambda: self._state.move(self._row.id, "up")),
+            ("↓", "아래로", True, lambda: self._state.move(self._row.id, "down")),
+            ("복제", "복제", False, lambda: self._state.duplicate(self._row.id)),
+            ("삭제", "삭제", False, lambda: self._state.remove(self._row.id)),
+        ):
+            b = QPushButton(label)
+            b.setObjectName("crudBtn")
+            if fixed:
+                b.setFixedSize(24, 24)
+            b.setToolTip(tip)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _checked, f=fn: f())
+            header.addWidget(b)
         outer.addWidget(self._header_w)
 
-        self._editor = QWidget()
-        ed = QVBoxLayout(self._editor)
-        ed.setContentsMargins(0, 0, 0, 0)
-        ed.setSpacing(5)
-        self._heading = QLineEdit(row.heading or "")
-        self._heading.setPlaceholderText("섹션 제목")
-        self._heading.textChanged.connect(self._on_heading)
-        ed.addWidget(self._heading)
-        self._body = QPlainTextEdit(row.body or "")
-        self._body.setPlaceholderText("외부 LLM 답변을 여기에 붙여넣으세요…")
-        self._body.setMinimumHeight(104)
-        self._body.textChanged.connect(self._on_body)
-        ed.addWidget(self._body)
-        self._editor.setVisible(False)
-        outer.addWidget(self._editor)
+        # 편집부 — PM3-A: prose 만 인라인 편집(전 kind 폼은 PM3-B)
+        self._is_prose = row.kind == "prose-guideline"
+        self._editor: QWidget | None = None
+        if self._is_prose:
+            self._editor = QWidget()
+            ed = QVBoxLayout(self._editor)
+            ed.setContentsMargins(0, 0, 0, 0)
+            ed.setSpacing(5)
+            self._heading = QLineEdit(row.heading or "")
+            self._heading.setPlaceholderText("섹션 제목")
+            self._heading.textChanged.connect(self._on_heading)
+            ed.addWidget(self._heading)
+            self._body = QPlainTextEdit(row.body or "")
+            self._body.setPlaceholderText("외부 LLM 답변을 여기에 붙여넣으세요…")
+            self._body.setMinimumHeight(104)
+            self._body.textChanged.connect(self._on_body)
+            ed.addWidget(self._body)
+            self._editor.setVisible(False)
+            outer.addWidget(self._editor)
 
         self._anim = QPropertyAnimation(self, b"maximumHeight")
         self._anim.setDuration(170)
@@ -236,11 +267,13 @@ class RowWidget(QFrame):
         self._anim.finished.connect(self._on_anim_done)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt 시그니처)
-        if self._header_w.geometry().contains(event.position().toPoint()):
+        if self._is_prose and self._header_w.geometry().contains(event.position().toPoint()):
             self.toggle()
         super().mousePressEvent(event)
 
     def set_open(self, value: bool) -> None:
+        if self._editor is None:
+            return
         self._open = value
         if value:
             self._editor.setVisible(True)
@@ -250,11 +283,12 @@ class RowWidget(QFrame):
         self._anim.start()
 
     def _on_anim_done(self) -> None:
-        if not self._open:
+        if not self._open and self._editor is not None:
             self._editor.setVisible(False)
 
     def toggle(self) -> None:
-        self.set_open(not self._open)
+        if self._editor is not None:
+            self.set_open(not self._open)
 
     def _on_heading(self, text: str) -> None:
         self._state.patch(self._row.id, {"heading": text})
@@ -266,7 +300,7 @@ class RowWidget(QFrame):
 class BuilderWindow(QMainWindow):
     def __init__(self, state: BuilderState | None = None) -> None:
         super().__init__()
-        self.state = state or BuilderState("my-project")
+        self.state = state or BuilderState("my-project", preset="minimal")
         self._settings = QSettings("harness-builder", "qt-shell")
         self.theme_name = os.environ.get("HB_THEME") or self._settings.value("theme", "light")
         if self.theme_name not in THEMES:
@@ -363,6 +397,7 @@ class BuilderWindow(QMainWindow):
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         v.addWidget(hint)
+        v.addWidget(self._preset_toggle())
 
         nav = QListWidget()
         nav.setSpacing(0)
@@ -433,6 +468,50 @@ class BuilderWindow(QMainWindow):
         rows_lay.addStretch(1)
         scroll.setWidget(holder)
         v.addWidget(scroll, 1)
+        v.addWidget(self._add_bar())
+
+    def _preset_toggle(self) -> QWidget:
+        track = QWidget()
+        track.setObjectName("segTrack")
+        lay = QHBoxLayout(track)
+        lay.setContentsMargins(3, 3, 3, 3)
+        lay.setSpacing(2)
+        group = QButtonGroup(track)
+        group.setExclusive(True)
+        for key, label in (("minimal", "빈 시작"), ("safety-first", "안전우선")):
+            b = QPushButton(label)
+            b.setObjectName("segBtn")
+            b.setCheckable(True)
+            b.setChecked(self.state._preset == key)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _checked, k=key: self.state.load_preset(k))
+            group.addButton(b)
+            lay.addWidget(b)
+        return track
+
+    def _add_bar(self) -> QWidget:
+        """선택 계층의 기본 추가 가능 kind 버튼 — 동적 추가(요구 1)."""
+        bar = QWidget()
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        entries = [
+            e for e in addable_kinds_by_layer.get(self.state.selected_layer, []) if e["basic"]
+        ]
+        if not entries:
+            return bar
+        lbl = QLabel("추가:")
+        lbl.setObjectName("muted")
+        lay.addWidget(lbl)
+        for entry in entries:
+            kind = entry["kind"]
+            b = QPushButton(f"+ {kind_registry[kind]['label']}")
+            b.setObjectName("addBtn")
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _checked, k=kind: self.state.add_component(k))
+            lay.addWidget(b)
+        lay.addStretch(1)
+        return bar
 
     # 우 패널 (S5/S6) + 테마 토글 ---
     def _rebuild_right(self) -> None:

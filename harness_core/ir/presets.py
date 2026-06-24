@@ -131,3 +131,37 @@ def safety_first_preset(project_name: str = "my-project") -> HarnessIR:
             ),
         ],
     )
+
+
+def minimal_preset(project_name: str = "my-project") -> HarnessIR:
+    """가벼운 시작 — 프로젝트 개요 prose 1개(본문 비움)만. 필요한 만큼 동적으로 추가."""
+    return HarnessIR(
+        meta=Meta(
+            ir_version="1.0",
+            target_tool="claude-code",
+            preset="minimal",
+            project_name=project_name,
+        ),
+        components=[
+            ProseGuideline(
+                id="ctx-project-overview",
+                layer="context",
+                title="프로젝트 개요",
+                involvement="assisted",
+                enabled=True,
+                scope="project",
+                heading="프로젝트 개요",
+                body="",
+                intent=Intent(
+                    raw="프로젝트 고유 컨텍스트 자리표시자", compiled_by="preset", confidence=1
+                ),
+            ),
+        ],
+    )
+
+
+# 프리셋 레지스트리 — 시작 화면 선택(빈 시작 / 안전우선)
+PRESETS = {
+    "minimal": minimal_preset,
+    "safety-first": safety_first_preset,
+}
