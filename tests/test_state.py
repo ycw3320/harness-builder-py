@@ -89,3 +89,22 @@ def test_load_preset_switches():
     assert len(s.ir.components) == 7
     s.load_preset("minimal")
     assert len(s.ir.components) == 1
+
+
+def test_all_presets_load_valid():
+    from harness_core.ir.presets import PRESETS
+
+    for name in PRESETS:
+        s = BuilderState("demo", preset=name)
+        assert len(s.ir.components) >= 1
+        assert s.ir.meta.preset == name
+
+
+def test_completion_meter():
+    from harness_app import view_model as vm
+
+    s = BuilderState("demo", preset="minimal")
+    c = vm.completion(s)
+    assert (c.filled, c.total, c.next_layer) == (1, 5, "permissions")
+    s.load_preset("safety-first")
+    assert vm.completion(s).filled == 3
