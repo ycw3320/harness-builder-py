@@ -79,8 +79,9 @@ def _dot(color: str, size: int = 10) -> QLabel:
 class RowWidget(QFrame):
     """36px 컴팩트 행 — 클릭 시 펼쳐 heading/body 편집 (QPropertyAnimation)."""
 
-    COLLAPSED = 38
-    EXPANDED = 196
+    HEADER_H = 34
+    COLLAPSED = 44  # 헤더(34) + 상/하 여백(5+5)
+    EXPANDED = 210
 
     def __init__(self, row: vm.RowVM, state: BuilderState) -> None:
         super().__init__()
@@ -92,13 +93,13 @@ class RowWidget(QFrame):
         self.setMaximumHeight(self.COLLAPSED)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(10, 0, 10, 8)
+        outer.setContentsMargins(12, 5, 12, 5)
         outer.setSpacing(6)
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         self._header_w = QWidget()
-        self._header_w.setFixedHeight(self.COLLAPSED)
+        self._header_w.setFixedHeight(self.HEADER_H)
         self._header_w.setLayout(header)
         header.addWidget(_dot(row.color))
         title = QLabel(row.title)
@@ -114,7 +115,7 @@ class RowWidget(QFrame):
         header.addWidget(kind)
         outer.addWidget(self._header_w)
 
-        # 펼침 편집부 (prose 슬라이스: heading + body)
+        # 펼침 편집부 (prose 슬라이스: heading + body). 접힘 시 숨겨 레이아웃에서 제외(겹침 방지)
         self._editor = QWidget()
         ed = QVBoxLayout(self._editor)
         ed.setContentsMargins(0, 0, 0, 0)
@@ -125,13 +126,16 @@ class RowWidget(QFrame):
         ed.addWidget(self._heading)
         self._body = QPlainTextEdit(row.body or "")
         self._body.setPlaceholderText("외부 LLM 답변을 여기에 붙여넣으세요…")
+        self._body.setMinimumHeight(104)
         self._body.textChanged.connect(self._on_body)
         ed.addWidget(self._body)
+        self._editor.setVisible(False)
         outer.addWidget(self._editor)
 
         self._anim = QPropertyAnimation(self, b"maximumHeight")
         self._anim.setDuration(160)
         self._anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._anim.finished.connect(self._on_anim_done)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt 시그니처)
         if self._header_w.geometry().contains(event.position().toPoint()):
@@ -140,10 +144,16 @@ class RowWidget(QFrame):
 
     def set_open(self, value: bool) -> None:
         self._open = value
+        if value:
+            self._editor.setVisible(True)  # 펼칠 땐 먼저 보이고 높이 애니메이션
         self._anim.stop()
         self._anim.setStartValue(self.maximumHeight())
         self._anim.setEndValue(self.EXPANDED if value else self.COLLAPSED)
         self._anim.start()
+
+    def _on_anim_done(self) -> None:
+        if not self._open:
+            self._editor.setVisible(False)  # 접힘 완료 후 숨김(겹침·잔상 방지)
 
     def toggle(self) -> None:
         self.set_open(not self._open)
