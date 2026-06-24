@@ -5,12 +5,15 @@ description = "하네스 빌더 — Claude Code 하네스 구성 데스크톱 �
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.10",
+  "PySide6>=6.6",  # GUI 프레임워크(앱 핵심 런타임). 코어/fs/llm 은 무의존이나 앱 실행엔 필수.
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
 # 인앱 LLM(BYO 키) — 선택 설치. 미설치 시 오프라인 복사→붙여넣기 흐름 유지.
 llm = ["anthropic>=0.69", "keyring>=24"]
+# exe 패키징 — 선택 설치. packaging/build_exe.py 실행 시에만 필요.
+build = ["pyinstaller>=6"]
 
 [build-system]
 requires = ["setuptools>=68"]
