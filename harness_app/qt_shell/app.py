@@ -773,6 +773,11 @@ class BuilderWindow(QMainWindow):
         view_lbl.setObjectName("section")
         head.addWidget(view_lbl)
         head.addStretch(1)
+        helpb = QPushButton("도움말")
+        helpb.setObjectName("addBtn")
+        helpb.setCursor(Qt.CursorShape.PointingHandCursor)
+        helpb.clicked.connect(self._show_welcome)
+        head.addWidget(helpb)
         gear = QPushButton("LLM 설정")
         gear.setObjectName("addBtn")
         gear.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1021,6 +1026,46 @@ class BuilderWindow(QMainWindow):
         dlg.exec()
         self._force_rebuild()  # 키 변경 반영(AI 버튼 활성/비활성)
 
+    # 온보딩 (PM5) — 첫 실행 환영 + 도움말 ---
+    def maybe_show_welcome(self) -> None:
+        if not self._settings.value("onboarded_v1", False, type=bool):
+            self._settings.setValue("onboarded_v1", True)
+            self._show_welcome()
+
+    def _show_welcome(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("하네스 빌더 — 안내")
+        dlg.setMinimumWidth(540)
+        v = QVBoxLayout(dlg)
+        v.setSpacing(10)
+        title = QLabel("하네스 빌더에 오신 것을 환영합니다")
+        title.setObjectName("h1")
+        v.addWidget(title)
+        body = QLabel(
+            "이 앱은 Claude Code 의 .claude/ 설정(하네스)을 시각으로 조립해, 내려받아 바로 쓸 수 있는 "
+            "폴더를 만듭니다. 결정론·오프라인이 기본이라 API 키 없이도 전부 동작합니다.\n\n"
+            "• 좌측 — 6계층 구성 영역과 시작 프리셋(빈 시작/안전우선/속도/MVP/엔터프라이즈).\n"
+            "• 중앙 — '추가'로 항목을 늘리고, 클릭해 펼쳐 편집. 각 항목의 '프롬프트 복사'로 외부 LLM 에 "
+            "요청하거나, 'LLM 설정'에 본인 API 키를 넣으면 'AI로 채우기'가 켜집니다.\n"
+            "• 우측 — 완성도 미터·다음 추천 영역, 실행 전 시뮬레이터(LLM 0회)·정합성 검사, "
+            "산출 미리보기, [폴더 선택 → 하네스 생성], 기존 폴더 가져오기.\n\n"
+            "강제수준은 프로즈(권고) < 정책문서(문서) < hook(자동 차단) 순이며, 항목에서 한 단계 올릴 수 있습니다."
+        )
+        body.setObjectName("muted")
+        body.setWordWrap(True)
+        v.addWidget(body)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        start = QPushButton("시작하기")
+        start.setObjectName("primaryBtn")
+        start.setCursor(Qt.CursorShape.PointingHandCursor)
+        start.clicked.connect(dlg.accept)
+        row.addWidget(start)
+        rw = QWidget()
+        rw.setLayout(row)
+        v.addWidget(rw)
+        dlg.exec()
+
 
 def make_app():
     from PySide6.QtGui import QFont, QFontDatabase
@@ -1046,6 +1091,7 @@ def make_app():
 def main() -> None:
     app, win = make_app()
     win.show()
+    win.maybe_show_welcome()
     app.exec()
 
 
