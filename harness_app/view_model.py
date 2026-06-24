@@ -68,6 +68,37 @@ class SimVM:
     reason: str
 
 
+@dataclass(frozen=True)
+class CompletionVM:
+    filled: int
+    total: int
+    percent: int
+    next_layer: str | None  # 비어 있는 다음 추천 계층
+    next_label: str | None
+
+
+# 완성도 집계 대상(편집 가능 계층). verification 은 내보내기 전용이라 제외.
+_COUNTABLE = ["context", "permissions", "mcp", "guardrails", "workflow"]
+
+
+def completion(state: BuilderState) -> CompletionVM:
+    """§0.6 완성도 미터 — 구성된 영역 수 + 다음 추천(비어 있는) 영역."""
+    counts = {
+        layer: sum(1 for c in state.ir.components if c.layer == layer and c.enabled)
+        for layer in _COUNTABLE
+    }
+    filled = sum(1 for layer in _COUNTABLE if counts[layer] > 0)
+    total = len(_COUNTABLE)
+    nxt = next((layer for layer in _COUNTABLE if counts[layer] == 0), None)
+    return CompletionVM(
+        filled=filled,
+        total=total,
+        percent=round(filled / total * 100),
+        next_layer=nxt,
+        next_label=layer_meta[nxt]["label"] if nxt else None,
+    )
+
+
 _OUTCOME_LABEL = {
     "blocked-by-hook": "hook 차단",
     "blocked-by-permission": "권한 차단",

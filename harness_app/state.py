@@ -22,7 +22,7 @@ from harness_core.ir.schema import (
 Scaffold = Literal["minimal", "harness-only"]
 Direction = Literal["up", "down"]
 Scope = Literal["global", "project"]
-PresetName = Literal["minimal", "safety-first"]
+PresetName = Literal["minimal", "safety-first", "speed", "mvp", "enterprise"]
 
 
 def group_key(c: HarnessComponent) -> str:

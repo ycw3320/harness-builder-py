@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -160,6 +161,9 @@ QPushButton#addBtn:hover { border: 1px solid $accent; color: $accent; }
 
 QFrame#guideBox { background: $surface_alt; border: 1px solid $border; border-radius: 8px; }
 
+QProgressBar#meter { background: $surface_alt; border: none; border-radius: 4px; }
+QProgressBar#meter::chunk { background: $accent; border-radius: 4px; }
+
 QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { margin: 2px 4px; border-radius: 8px; }
 QListWidget::item:selected { background: $selected_bg; }
@@ -184,6 +188,13 @@ def _rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+_PRESET_LABELS = [
+    ("minimal", "빈 시작"),
+    ("safety-first", "안전우선"),
+    ("speed", "속도"),
+    ("mvp", "MVP"),
+    ("enterprise", "엔터프라이즈"),
+]
 _FIELD_H = {"textarea": 120, "list": 104, "dict": 104}  # 펼침 높이 추정용(위젯별)
 _TITLE_FIELD = {  # AI 생성 후 제목으로 쓸 대표 필드
     "prose-guideline": "heading",
@@ -692,23 +703,15 @@ class BuilderWindow(QMainWindow):
         v.addWidget(self._add_bar())
 
     def _preset_toggle(self) -> QWidget:
-        track = QWidget()
-        track.setObjectName("segTrack")
-        lay = QHBoxLayout(track)
-        lay.setContentsMargins(3, 3, 3, 3)
-        lay.setSpacing(2)
-        group = QButtonGroup(track)
-        group.setExclusive(True)
-        for key, label in (("minimal", "빈 시작"), ("safety-first", "안전우선")):
-            b = QPushButton(label)
-            b.setObjectName("segBtn")
-            b.setCheckable(True)
-            b.setChecked(self.state._preset == key)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.clicked.connect(lambda _checked, k=key: self.state.load_preset(k))
-            group.addButton(b)
-            lay.addWidget(b)
-        return track
+        cb = QComboBox()
+        keys = []
+        for key, label in _PRESET_LABELS:
+            cb.addItem(f"프리셋 · {label}")
+            keys.append(key)
+        if self.state._preset in keys:
+            cb.setCurrentIndex(keys.index(self.state._preset))
+        cb.currentIndexChanged.connect(lambda i: self.state.load_preset(keys[i]))
+        return cb
 
     def _add_bar(self) -> QWidget:
         """선택 계층의 추가 가능 kind 버튼 — 동적 추가(요구 1). 고급 토글로 advanced kind 노출."""
@@ -759,6 +762,30 @@ class BuilderWindow(QMainWindow):
         head_w = QWidget()
         head_w.setLayout(head)
         v.addWidget(head_w)
+
+        # 완성도 미터 + 다음 추천 영역 (§0.6 안내형 누적 흐름)
+        comp = vm.completion(self.state)
+        v.addWidget(self._section(f"완성도 · 구성된 영역 {comp.filled}/{comp.total}"))
+        meter = QProgressBar()
+        meter.setObjectName("meter")
+        meter.setRange(0, 100)
+        meter.setValue(comp.percent)
+        meter.setTextVisible(False)
+        meter.setFixedHeight(8)
+        v.addWidget(meter)
+        if comp.next_layer:
+            nxt = QPushButton(f"다음 추천 영역: {comp.next_label} →")
+            nxt.setObjectName("addBtn")
+            nxt.setCursor(Qt.CursorShape.PointingHandCursor)
+            nxt.clicked.connect(
+                lambda _c=False, ly=comp.next_layer: self.state.set_selected_layer(ly)
+            )
+            v.addWidget(nxt)
+        else:
+            done = QLabel("핵심 영역 구성 완료 — 내보낼 준비 완료 ✓")
+            done.setObjectName("muted")
+            done.setWordWrap(True)
+            v.addWidget(done)
 
         v.addWidget(self._section("라이브 시뮬레이터 · LLM 0회"))
         for s in vm.sim_items(self.state):
