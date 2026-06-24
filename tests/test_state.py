@@ -74,3 +74,18 @@ def test_add_prose_section_scope():
     last = s.ir.components[-1]
     assert last.kind == "prose-guideline"
     assert last.scope == "global"
+
+
+def test_minimal_preset_starts_light():
+    s = BuilderState("demo", preset="minimal")
+    assert len(s.ir.components) == 1
+    assert s.ir.components[0].kind == "prose-guideline"
+    assert s.ir.meta.preset == "minimal"
+
+
+def test_load_preset_switches():
+    s = BuilderState("demo", preset="minimal")
+    s.load_preset("safety-first")
+    assert len(s.ir.components) == 7
+    s.load_preset("minimal")
+    assert len(s.ir.components) == 1
