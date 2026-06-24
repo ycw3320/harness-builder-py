@@ -10,3 +10,8 @@ venv/
 .ruff_cache/
 *.spec
 .env
+
+# PM2 프로토타입 임시 산출물(스크린샷·런로그·프로브)
+_shot_*.png
+_probe_*.png
+_flet_run.log
