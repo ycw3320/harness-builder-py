@@ -91,6 +91,12 @@ class BuilderState:
         self.selected_file = None
         self._notify()
 
+    def load_ir(self, ir: HarnessIR) -> None:
+        """외부 IR(역import 등)로 교체."""
+        self.ir = ir
+        self.selected_file = None
+        self._notify()
+
     # CRUD ---
     def add_component(self, kind: ComponentKind) -> None:
         comp = create_component(kind, self.selected_layer)
