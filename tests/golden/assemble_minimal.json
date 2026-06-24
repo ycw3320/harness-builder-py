@@ -1,0 +1,50 @@
+[
+  {
+    "path": "_APPLY/APPLY.md",
+    "content": "# 하네스 적용 안내\n\n이 `_APPLY/` 폴더는 **프로젝트가 아닙니다.** 적용을 돕는 보조 파일만 들어 있습니다.\n\n## 1. 프로젝트 적용\n\n- `demo/` 폴더가 곧 프로젝트 루트입니다. 원하는 위치로 옮긴 뒤:\n\n```bash\ncd demo\ngit init && claude\n```\n\n## 2. 전역 지침 (선택)\n\n- `_APPLY/global-CLAUDE.md` 가 있으면, 그 내용을 `~/.claude/CLAUDE.md` 에 **병합**하세요. 모든 프로젝트 공통 지침입니다.\n\n## 3. 비밀키\n\n- `.env.example` 의 항목을 복사해 `.env` 로 만들고 실제 값을 채우세요. `.env` 는 절대 커밋하지 마세요.\n"
+  },
+  {
+    "path": "_APPLY/global-CLAUDE.md",
+    "content": "<!-- 이 파일 내용을 ~/.claude/CLAUDE.md 에 병합하세요 (전역 지침) -->\n\n# 전역 지침\n\n## 언어·보안 기본 자세\n\n- 모든 출력은 한국어로 작성한다.\n- 자격 증명·API 키·토큰을 코드/커밋/로그에 남기지 않는다.\n- 파일 삭제·덮어쓰기 등 비가역 작업 전에는 먼저 확인한다.\n"
+  },
+  {
+    "path": "demo/.claude/commands/.gitkeep",
+    "content": ""
+  },
+  {
+    "path": "demo/.claude/hooks/block-secrets.sh",
+    "content": "#!/usr/bin/env bash\n# .env* 파일 쓰기 차단 — 시크릿 보호 (강제수준 3단: hook)\ninput=$(cat)\npath=$(printf '%s' \"$input\" | grep -oE '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' | head -1)\ncase \"$path\" in\n  *.env*) echo \"차단: .env 파일에는 쓸 수 없습니다 (시크릿 보호)\" >&2; exit 2;;\nesac\nexit 0\n"
+  },
+  {
+    "path": "demo/.claude/output-styles/.gitkeep",
+    "content": ""
+  },
+  {
+    "path": "demo/.claude/rules/secrets.md",
+    "content": "# 시크릿 취급 규칙\n\n- 비밀키·토큰·비밀번호는 `.env`(gitignore) 또는 비밀 저장소에만 둔다.\n- 설정 파일에는 `${VAR}` 플레이스홀더만 사용하고 실제 값을 넣지 않는다.\n- 발견 즉시 사용자에게 보고하고 회수한다.\n"
+  },
+  {
+    "path": "demo/.claude/settings.json",
+    "content": "{\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(npm run test:*)\"\n    ],\n    \"ask\": [\n      \"Bash(git push --force:*)\"\n    ],\n    \"deny\": [\n      \"Bash(rm -rf:*)\"\n    ]\n  },\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Write|Edit\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \".claude/hooks/block-secrets.sh\"\n          }\n        ]\n      }\n    ]\n  }\n}\n"
+  },
+  {
+    "path": "demo/.claude/settings.local.json",
+    "content": "{\n  \"permissions\": {\n    \"allow\": [],\n    \"ask\": [],\n    \"deny\": []\n  }\n}\n"
+  },
+  {
+    "path": "demo/.claude/skills/.gitkeep",
+    "content": ""
+  },
+  {
+    "path": "demo/.gitignore",
+    "content": ".env\n.env.local\n.claude/settings.local.json\nnode_modules/\ndist/\n"
+  },
+  {
+    "path": "demo/CLAUDE.md",
+    "content": "# demo — 프로젝트 지침\n\n## 프로젝트 개요\n\n<!-- 프로젝트 스택·도메인·빌드 명령·명명 규칙을 여기에 기술하세요. -->\n"
+  },
+  {
+    "path": "demo/README.md",
+    "content": "# demo\n\n이 폴더는 **하네스 빌더**로 생성된 Claude Code 하네스가 적용된 프로젝트 골격입니다.\n\n## 적용 방법\n\n```bash\ngit init\nclaude        # 이 폴더에서 Claude Code 실행 — .claude/ 설정이 자동 적용됩니다\n```\n\n## 구조\n\n- `CLAUDE.md` — 프로젝트 지침(언어·스택·규칙)\n- `.claude/settings.json` — 권한·가드레일(hook)\n- `.claude/hooks/` — 자동 차단 스크립트\n- `.claude/agents/` — 전문 역할(sub-agent)\n- `.claude/rules/` — 규칙 문서\n- `.mcp.json` — 외부 도구(MCP) 연결\n- `.env.example` — 필요한 비밀키 목록 (복사해 `.env` 로 채우세요)\n\n전역 지침은 `../_APPLY/` 의 안내를 참고하세요.\n"
+  }
+]
