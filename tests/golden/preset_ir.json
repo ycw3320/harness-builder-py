@@ -1,0 +1,121 @@
+{
+  "meta": {
+    "irVersion": "1.0",
+    "targetTool": "claude-code",
+    "preset": "safety-first",
+    "projectName": "demo"
+  },
+  "components": [
+    {
+      "id": "ctx-global-lang",
+      "kind": "prose-guideline",
+      "layer": "context",
+      "title": "언어·보안 기본 자세 (전역)",
+      "involvement": "assisted",
+      "enabled": true,
+      "scope": "global",
+      "heading": "언어·보안 기본 자세",
+      "body": "- 모든 출력은 한국어로 작성한다.\n- 자격 증명·API 키·토큰을 코드/커밋/로그에 남기지 않는다.\n- 파일 삭제·덮어쓰기 등 비가역 작업 전에는 먼저 확인한다.",
+      "intent": {
+        "raw": "한국어로, 보수적으로, 비밀키 노출 금지",
+        "compiledBy": "preset",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "ctx-project-overview",
+      "kind": "prose-guideline",
+      "layer": "context",
+      "title": "프로젝트 개요",
+      "involvement": "assisted",
+      "enabled": true,
+      "scope": "project",
+      "heading": "프로젝트 개요",
+      "body": "<!-- 프로젝트 스택·도메인·빌드 명령·명명 규칙을 여기에 기술하세요. -->",
+      "intent": {
+        "raw": "프로젝트 고유 컨텍스트 자리표시자",
+        "compiledBy": "preset",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "perm-deny-rm",
+      "kind": "permission-rule",
+      "layer": "permissions",
+      "title": "재귀 강제 삭제 금지",
+      "involvement": "manual-gate",
+      "enabled": true,
+      "action": "deny",
+      "pattern": "Bash(rm -rf:*)",
+      "intent": {
+        "raw": "rm -rf 류 위험 삭제 명령 차단",
+        "compiledBy": "preset",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "perm-ask-forcepush",
+      "kind": "permission-rule",
+      "layer": "permissions",
+      "title": "강제 push 확인",
+      "involvement": "manual-gate",
+      "enabled": true,
+      "action": "ask",
+      "pattern": "Bash(git push --force:*)",
+      "intent": {
+        "raw": "강제 push 는 사용자 확인 후",
+        "compiledBy": "preset",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "perm-allow-test",
+      "kind": "permission-rule",
+      "layer": "permissions",
+      "title": "테스트 실행 허용",
+      "involvement": "manual-gate",
+      "enabled": true,
+      "action": "allow",
+      "pattern": "Bash(npm run test:*)",
+      "intent": {
+        "raw": "테스트 실행은 자유 허용",
+        "compiledBy": "preset",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "guard-hook-secrets",
+      "kind": "hook",
+      "layer": "guardrails",
+      "title": ".env 쓰기 차단 (시크릿 보호)",
+      "involvement": "manual-gate",
+      "enabled": true,
+      "event": "PreToolUse",
+      "matcherTool": "Write|Edit",
+      "pathGlob": "**/.env*",
+      "action": "deny",
+      "scriptName": "block-secrets.sh",
+      "scriptBody": "#!/usr/bin/env bash\n# .env* 파일 쓰기 차단 — 시크릿 보호 (강제수준 3단: hook)\ninput=$(cat)\npath=$(printf '%s' \"$input\" | grep -oE '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' | head -1)\ncase \"$path\" in\n  *.env*) echo \"차단: .env 파일에는 쓸 수 없습니다 (시크릿 보호)\" >&2; exit 2;;\nesac\nexit 0",
+      "intent": {
+        "raw": "비밀키 파일을 못 쓰게 막아",
+        "compiledBy": "preset",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "guard-policy-secrets",
+      "kind": "policy-doc",
+      "layer": "guardrails",
+      "title": "시크릿 취급 규칙",
+      "involvement": "manual-gate",
+      "enabled": true,
+      "docName": "secrets.md",
+      "body": "# 시크릿 취급 규칙\n\n- 비밀키·토큰·비밀번호는 `.env`(gitignore) 또는 비밀 저장소에만 둔다.\n- 설정 파일에는 `${VAR}` 플레이스홀더만 사용하고 실제 값을 넣지 않는다.\n- 발견 즉시 사용자에게 보고하고 회수한다.",
+      "intent": {
+        "raw": "시크릿 취급 규칙 문서화",
+        "compiledBy": "preset",
+        "confidence": 1
+      }
+    }
+  ]
+}

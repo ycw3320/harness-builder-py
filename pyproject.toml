@@ -1,0 +1,26 @@
+[project]
+name = "harness-builder-py"
+version = "0.1.0"
+description = "하네스 빌더 — Claude Code 하네스 구성 데스크톱 앱 (Python)"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["harness_core*", "harness_fs*", "harness_app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
