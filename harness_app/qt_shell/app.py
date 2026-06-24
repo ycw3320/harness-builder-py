@@ -525,6 +525,7 @@ class BuilderWindow(QMainWindow):
             self.theme_name = "light"
         self.setWindowTitle("하네스 빌더 — 실행 전 시뮬레이터형")
         self.resize(1180, 720)
+        self.setMinimumSize(960, 640)  # frozen(PyInstaller) 환경 창 축소 방어
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self._left_host = self._host("leftPane")
