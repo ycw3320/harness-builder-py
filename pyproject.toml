@@ -9,13 +9,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+# 인앱 LLM(BYO 키) — 선택 설치. 미설치 시 오프라인 복사→붙여넣기 흐름 유지.
+llm = ["anthropic>=0.69", "keyring>=24"]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["harness_core*", "harness_fs*", "harness_app*"]
+include = ["harness_core*", "harness_fs*", "harness_app*", "harness_llm*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -36,3 +38,4 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 "harness_core/lint/lint.py" = ["E501"]
 "harness_app/guides.py" = ["E501"]
 "harness_app/qt_shell/app.py" = ["E501"]
+"harness_llm/prompts.py" = ["E501"]

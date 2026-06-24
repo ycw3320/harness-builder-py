@@ -16,9 +16,11 @@ from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QComboBox,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -37,6 +39,8 @@ from harness_core.export.assemble_project import assemble_project
 from harness_core.ir.registry import addable_kinds_by_layer, kind_registry
 from harness_fs.policy import MergeStrategy
 from harness_fs.writer import write_tree
+from harness_llm import credentials
+from harness_llm.client import DEFAULT_MODEL, MODELS, AnthropicClient, LLMError, anthropic_available
 
 from .. import view_model as vm
 from ..guides import layer_order
@@ -180,6 +184,14 @@ def _rgba(hex_color: str, alpha: float) -> str:
 
 
 _FIELD_H = {"textarea": 120, "list": 104, "dict": 104}  # 펼침 높이 추정용(위젯별)
+_TITLE_FIELD = {  # AI 생성 후 제목으로 쓸 대표 필드
+    "prose-guideline": "heading",
+    "permission-rule": "pattern",
+    "mcp-server": "server_name",
+    "hook": "script_name",
+    "policy-doc": "doc_name",
+    "sub-agent": "name",
+}
 
 
 def _dot(color: str, size: int = 10) -> QLabel:
@@ -310,11 +322,14 @@ class RowWidget(QFrame):
     HEADER_H = 34
     COLLAPSED = 44
 
-    def __init__(self, row: vm.RowVM, state: BuilderState, tokens: dict, is_dark: bool) -> None:
+    def __init__(
+        self, row: vm.RowVM, state: BuilderState, tokens: dict, is_dark: bool, llm_fill=None
+    ) -> None:
         super().__init__()
         self.setObjectName("rowCard")
         self._row = row
         self._state = state
+        self._llm_fill = llm_fill  # (kind, comp_id) 콜백 — 키 있을 때만 전달
         self._open = False
         self.setMinimumHeight(self.COLLAPSED)
         self.setMaximumHeight(self.COLLAPSED)
@@ -454,6 +469,12 @@ class RowWidget(QFrame):
         lab.setObjectName("section")
         head.addWidget(lab)
         head.addStretch(1)
+        if self._llm_fill is not None:
+            ai = QPushButton("AI로 채우기")
+            ai.setObjectName("primaryBtn")
+            ai.setCursor(Qt.CursorShape.PointingHandCursor)
+            ai.clicked.connect(lambda: self._llm_fill(self._row.kind, self._row.id))
+            head.addWidget(ai)
         copy = QPushButton("프롬프트 복사")
         copy.setObjectName("addBtn")
         copy.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -657,9 +678,10 @@ class BuilderWindow(QMainWindow):
         rows_lay = QVBoxLayout(holder)
         rows_lay.setContentsMargins(0, 0, 0, 0)
         rows_lay.setSpacing(10)
+        fill = self._llm_fill_component if self._llm_ready() else None
         self._rows: list[RowWidget] = []
         for r in vm.rows_for_selected(self.state):
-            rw = RowWidget(r, self.state, self.tokens, self.is_dark)
+            rw = RowWidget(r, self.state, self.tokens, self.is_dark, fill)
             self._rows.append(rw)
             rows_lay.addWidget(rw)
         rows_lay.addStretch(1)
@@ -726,6 +748,11 @@ class BuilderWindow(QMainWindow):
         view_lbl.setObjectName("section")
         head.addWidget(view_lbl)
         head.addStretch(1)
+        gear = QPushButton("LLM 설정")
+        gear.setObjectName("addBtn")
+        gear.setCursor(Qt.CursorShape.PointingHandCursor)
+        gear.clicked.connect(self._open_settings)
+        head.addWidget(gear)
         head.addWidget(self._theme_toggle())
         head_w = QWidget()
         head_w.setLayout(head)
@@ -801,6 +828,110 @@ class BuilderWindow(QMainWindow):
             "생성 완료",
             f"생성 {len(report.created)}개 · 건너뜀 {len(report.skipped)}개\n{dest}",
         )
+
+    # 인앱 LLM (BYO 키) — 키 있을 때만 활성, 없으면 §0.6 복사→붙여넣기 유지 (PM3-C) ---
+    def _llm_ready(self) -> bool:
+        return anthropic_available() and credentials.has_api_key("anthropic")
+
+    def _llm_fill_component(self, kind: str, comp_id: str) -> None:
+        intent, ok = QInputDialog.getMultiLineText(
+            self, "AI로 채우기", f"무엇을 만들지 자연어로 적으세요 ({kind}):", ""
+        )
+        if not ok or not intent.strip():
+            return
+        key = credentials.get_api_key("anthropic")
+        if not key:
+            QMessageBox.information(
+                self, "LLM 설정 필요", "먼저 'LLM 설정'에서 API 키를 입력하세요."
+            )
+            return
+        model = self._settings.value("llm_model", DEFAULT_MODEL)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            data = AnthropicClient(key, model).generate(kind, intent.strip())
+        except LLMError as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "LLM 오류", str(e))
+            return
+        QApplication.restoreOverrideCursor()
+        patch = dict(data)
+        tf = _TITLE_FIELD.get(kind)
+        if tf and data.get(tf):
+            patch["title"] = str(data[tf])[:60]
+        patch["intent"] = {"raw": intent.strip(), "compiled_by": "llm", "confidence": 0.9}
+        self.state.patch(comp_id, patch)
+        self._force_rebuild()
+        for rw in self._rows:
+            if rw._row.id == comp_id:
+                rw.set_open(True)
+                break
+
+    def _open_settings(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("LLM 설정")
+        dlg.setMinimumWidth(460)
+        v = QVBoxLayout(dlg)
+        v.setSpacing(10)
+        info = QLabel(
+            "API 키를 입력하면 '외부 LLM에 이렇게 요청' 대신 앱에서 바로 생성합니다.\n"
+            "주의: 입력한 의도가 선택한 LLM 제공자로 전송됩니다(오프라인 → 온라인 전환).\n"
+            "키는 OS 자격증명관리자에 저장되며 코드·로그에 남지 않습니다."
+        )
+        info.setObjectName("muted")
+        info.setWordWrap(True)
+        v.addWidget(info)
+        if not anthropic_available():
+            warn = QLabel("anthropic 미설치 — pip install harness-builder[llm]")
+            warn.setObjectName("lintWarn")
+            warn.setWordWrap(True)
+            v.addWidget(warn)
+        v.addWidget(QLabel("모델"))
+        model_cb = QComboBox()
+        model_cb.addItems(MODELS)
+        model_cb.setCurrentText(self._settings.value("llm_model", DEFAULT_MODEL))
+        v.addWidget(model_cb)
+        v.addWidget(QLabel("Anthropic API 키"))
+        key_le = QLineEdit()
+        key_le.setEchoMode(QLineEdit.EchoMode.Password)
+        key_le.setPlaceholderText(
+            "(저장됨 — 변경 시에만 입력)" if credentials.has_api_key("anthropic") else "sk-ant-..."
+        )
+        v.addWidget(key_le)
+        btns = QHBoxLayout()
+        delete = QPushButton("키 삭제")
+        delete.setObjectName("addBtn")
+        close = QPushButton("닫기")
+        close.setObjectName("addBtn")
+        save = QPushButton("저장")
+        save.setObjectName("primaryBtn")
+        btns.addWidget(delete)
+        btns.addStretch(1)
+        btns.addWidget(close)
+        btns.addWidget(save)
+        bw = QWidget()
+        bw.setLayout(btns)
+        v.addWidget(bw)
+
+        def do_save() -> None:
+            self._settings.setValue("llm_model", model_cb.currentText())
+            k = key_le.text().strip()
+            if k:
+                try:
+                    credentials.save_api_key("anthropic", k)
+                except RuntimeError as e:
+                    QMessageBox.warning(dlg, "저장 실패", str(e))
+                    return
+            dlg.accept()
+
+        def do_delete() -> None:
+            credentials.delete_api_key("anthropic")
+            dlg.accept()
+
+        save.clicked.connect(do_save)
+        delete.clicked.connect(do_delete)
+        close.clicked.connect(dlg.reject)
+        dlg.exec()
+        self._force_rebuild()  # 키 변경 반영(AI 버튼 활성/비활성)
 
 
 def make_app():
