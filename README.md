@@ -26,6 +26,10 @@ python -m pytest          # 코어 테스트 + 골든 바이트-동일 게이트
 
 골든 fixture는 `tests/golden/`(TS 산출 박제). 재생성: TS repo에서 `npx -y tsx scripts/gen-golden.ts <out>`.
 
+## 문서
+
+설계·규칙·결정은 [`docs/00_INDEX.md`](docs/00_INDEX.md)에서 시작 — 아키텍처·컨벤션·용어집·계약 SPEC(IR/EXPORT/LINT/SIMULATOR)·FS/STATE/PM2 SPEC·ADR. 개발 시 각 영역은 "먼저 볼 문서"를 따른다.
+
 ## 로드맵
 - **PM1** ✅ 코어 포팅 + 골든 게이트
 - **PM2** Flet·Qt 최소 셸 + 직접 폴더쓰기 + 컴팩트 행 비교 → 프레임워크 확정
