@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from harness_core.export.assemble_project import assemble_project
 from harness_core.ir.enforcement import can_promote, enforcement_level
+from harness_core.ir.schema import HarnessIR
 from harness_core.lint.lint import lint_ir
 from harness_core.sim.simulate import default_scenarios, simulate
 
@@ -38,8 +39,12 @@ class FieldSpec:
     name: str  # 스키마 필드명(snake_case)
     label: str
     widget: str  # line | textarea | combo | list | dict
-    options: tuple[str, ...] = ()  # combo 용
+    options: tuple[str, ...] = ()  # combo 용(원시 값)
     placeholder: str = ""
+    tip: str = ""  # PM6-S5: 호버 시 보여줄 개발자용 풀이(2단 톤의 둘째 단)
+    option_labels: tuple[
+        str, ...
+    ] = ()  # PM6-S5: combo 표시 라벨(options 와 같은 순서, 빈값=원시 사용)
 
 
 @dataclass(frozen=True)
@@ -69,6 +74,33 @@ class SimVM:
     label: str
     outcome: str
     reason: str
+
+
+@dataclass(frozen=True)
+class SimCompareVM:
+    """before/after 대비 — 빈 IR(규칙 없음) vs 현재 IR(지금 구성). 초심자 가치 시연용.
+
+    before 는 항상 '규칙 없으면'(빈 IR)이라 거의 통과 — 과장 없이 정직하게 대비한다.
+    """
+
+    label: str
+    before_outcome: str  # 표시 라벨(규칙 없으면)
+    before_raw: str  # 원시 outcome 키(색·아이콘 분기용)
+    after_outcome: str  # 표시 라벨(지금)
+    after_raw: str
+    after_reason: str  # 왜 그 결과인지 한 줄(차단/확인 시)
+    after_blocked_by: str | None  # 차단·확인을 만든 컴포넌트 id (점프용)
+    changed: bool  # before≠after (대비 강조용)
+
+
+@dataclass(frozen=True)
+class SimRuleVM:
+    """시뮬레이터 결과를 바꾸는 '켜진 규칙' — 토글로 끄면 차단이 풀림(인과 체감)."""
+
+    id: str
+    title: str
+    kind: str
+    enabled: bool
 
 
 @dataclass(frozen=True)
@@ -112,27 +144,89 @@ _OUTCOME_LABEL = {
 # kind별 편집 필드 스펙 (스키마 필드와 1:1). id/layer/involvement/enabled/title 은 공통 처리.
 _SPECS: dict[str, list[FieldSpec]] = {
     "prose-guideline": [
-        FieldSpec("scope", "범위", "combo", ("project", "global")),
+        FieldSpec(
+            "scope",
+            "적용 범위",
+            "combo",
+            ("project", "global"),
+            option_labels=("이 프로젝트만", "모든 프로젝트"),
+            tip="이 프로젝트에만(.claude/CLAUDE.md) 또는 내 모든 프로젝트에(~/.claude/CLAUDE.md) 적용.",
+        ),
         FieldSpec("heading", "섹션 제목", "line"),
         FieldSpec("body", "본문", "textarea", placeholder="외부 LLM 답변을 붙여넣으세요…"),
     ],
     "permission-rule": [
-        FieldSpec("action", "동작", "combo", ("allow", "ask", "deny")),
-        FieldSpec("pattern", "패턴", "line", placeholder="Bash(rm -rf:*)"),
+        FieldSpec(
+            "action",
+            "동작",
+            "combo",
+            ("allow", "ask", "deny"),
+            option_labels=("허용", "질문", "금지"),
+            tip="허용=자유 실행 / 질문=실행 전 물어봄 / 금지=차단. 평가 순서는 금지>질문>허용.",
+        ),
+        FieldSpec(
+            "pattern",
+            "대상 패턴",
+            "line",
+            placeholder="Bash(rm -rf:*)",
+            tip="무엇에 적용할지. 예: Bash(rm -rf:*) = 'rm -rf'로 시작하는 명령 / Read(./secret) = 특정 파일 읽기. 넓게보다 좁게.",
+        ),
     ],
     "mcp-server": [
         FieldSpec("server_name", "서버 이름", "line", placeholder="github"),
-        FieldSpec("command", "실행 명령", "line", placeholder="npx"),
+        FieldSpec(
+            "command",
+            "실행 명령",
+            "line",
+            placeholder="npx",
+            tip="외부 도구를 띄우는 명령. 예: npx = Node 패키지 실행기.",
+        ),
         FieldSpec("args", "인자", "list"),
-        FieldSpec("env", "환경변수 (${VAR} 플레이스홀더만)", "dict"),
+        FieldSpec(
+            "env",
+            "환경변수",
+            "dict",
+            tip="비밀키는 값에 실제 키 대신 ${VAR} 만 적으세요(예: ${GITHUB_TOKEN}). 실제 값은 .env 파일에 둡니다.",
+        ),
     ],
     "hook": [
-        FieldSpec("event", "시점", "combo", ("PreToolUse", "PostToolUse", "SessionStart", "Stop")),
-        FieldSpec("matcher_tool", "대상 도구", "line", placeholder="Write|Edit"),
-        FieldSpec("path_glob", "경로 glob(선택)", "line", placeholder="**/.env*"),
-        FieldSpec("action", "동작", "combo", ("deny", "allow", "warn")),
+        FieldSpec(
+            "event",
+            "검사 시점",
+            "combo",
+            ("PreToolUse", "PostToolUse", "SessionStart", "Stop"),
+            option_labels=("도구 실행 전", "도구 실행 후", "세션 시작", "세션 종료"),
+            tip="언제 검사할지. '도구 실행 전'이면 위험한 작업을 실행되기 전에 막을 수 있습니다.",
+        ),
+        FieldSpec(
+            "matcher_tool",
+            "대상 도구",
+            "line",
+            placeholder="Write|Edit",
+            tip="검사할 도구. 예: Write|Edit = 파일 쓰기 또는 수정( | 은 '또는').",
+        ),
+        FieldSpec(
+            "path_glob",
+            "경로 패턴(선택)",
+            "line",
+            placeholder="**/.env*",
+            tip="경로 조건. 예: **/.env* = 모든 폴더의 .env 파일. *=아무 글자, **=하위 폴더 포함.",
+        ),
+        FieldSpec(
+            "action",
+            "동작",
+            "combo",
+            ("deny", "allow", "warn"),
+            option_labels=("금지", "허용", "경고"),
+            tip="금지=차단 / 허용=통과 / 경고=메시지만.",
+        ),
         FieldSpec("script_name", "스크립트 파일", "line", placeholder="block-secrets.sh"),
-        FieldSpec("script_body", "스크립트 본문 (exit 2=차단)", "textarea"),
+        FieldSpec(
+            "script_body",
+            "검사 스크립트",
+            "textarea",
+            tip="검사 로직(bash). exit 2 = 차단(작업 취소), exit 0 = 통과. 도구 입력은 stdin 으로 들어옵니다.",
+        ),
     ],
     "policy-doc": [
         FieldSpec("doc_name", "문서 파일", "line", placeholder="secrets.md"),
@@ -141,7 +235,12 @@ _SPECS: dict[str, list[FieldSpec]] = {
     "sub-agent": [
         FieldSpec("name", "이름", "line", placeholder="code-reviewer"),
         FieldSpec("description", "설명(언제 부르는지)", "line"),
-        FieldSpec("tools", "도구", "list"),
+        FieldSpec(
+            "tools",
+            "도구",
+            "list",
+            tip="이 역할이 쓸 도구만 적으세요. 예: Read, Grep, Write. 적게 줄수록 안전합니다.",
+        ),
         FieldSpec("model", "모델(선택)", "line"),
         FieldSpec("system_prompt", "시스템 프롬프트", "textarea"),
     ],
@@ -242,3 +341,43 @@ def sim_items(state: BuilderState) -> list[SimVM]:
             )
         )
     return out
+
+
+def sim_compare(state: BuilderState) -> list[SimCompareVM]:
+    """before/after 시연 — 빈 IR(규칙 0개)과 현재 IR을 같은 시나리오로 평가해 대비.
+
+    '하네스 없으면 vs 지금'을 한 화면에서 보여주는 초심자 아하 엔진. 코어 무수정 —
+    결정론 simulate 를 빈 IR 로 한 번 더 호출할 뿐(LLM 0회 유지). before 는 정직하게
+    '규칙 없으면'(빈 IR) 기준이라 과장 없이 대비된다.
+    """
+    empty = HarnessIR(meta=state.ir.meta, components=[])
+    out: list[SimCompareVM] = []
+    for sc in default_scenarios:
+        before = simulate(empty, sc)
+        after = simulate(state.ir, sc)
+        out.append(
+            SimCompareVM(
+                label=sc["label"],
+                before_outcome=_OUTCOME_LABEL.get(before["outcome"], before["outcome"]),
+                before_raw=before["outcome"],
+                after_outcome=_OUTCOME_LABEL.get(after["outcome"], after["outcome"]),
+                after_raw=after["outcome"],
+                after_reason=after["reasons"][-1] if after["reasons"] else "",
+                after_blocked_by=after.get("blockedBy"),
+                changed=before["outcome"] != after["outcome"],
+            )
+        )
+    return out
+
+
+# 시뮬레이터 결과를 좌우하는 kind — 토글 리스트 대상(hook·permission-rule만 simulate 에 반영)
+_SIM_RULE_KINDS = ("hook", "permission-rule")
+
+
+def sim_rules(state: BuilderState) -> list[SimRuleVM]:
+    """시뮬레이터 결과를 바꾸는 규칙(hook·permission-rule) 목록 — '꺼보세요' 토글용."""
+    return [
+        SimRuleVM(id=c.id, title=c.title, kind=c.kind, enabled=c.enabled)
+        for c in state.ir.components
+        if c.kind in _SIM_RULE_KINDS
+    ]

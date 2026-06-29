@@ -235,6 +235,16 @@ enforcement_ladder: list[dict[str, str]] = [
     {"key": "hook-block", "label": "hook 자동 차단", "desc": "결정론적 차단 — 물리적으로 불가능"},
 ]
 
+# PM6: 하네스 단일 정의(SSOT) — 안전벨트 비유. 환영·시연 아하·export 3곳에서 동일 노출(spaced repetition).
+HARNESS_DEFINITION = (
+    "하네스 = Claude Code(AI 코딩 도구)가 내 규칙대로 안전하게 움직이도록 잡아주는 설정 묶음"
+    "(.claude/ 폴더 + CLAUDE.md). 빠른 말에게 채우는 안전벨트처럼, 평소엔 자유롭게 일하되 "
+    "위험한 방향(.env·강제 push)으로는 못 가게 잡아줍니다."
+)
+HARNESS_AHA = "방금 본 게 하네스예요"
+# 6계층 멘탈모델 — '왜 이 순서인가'를 한 줄로(과소일반화 '하네스=차단' 보완)
+LAYER_FLOW_CAPTION = "아는가 → 해도 되나 → 절대 못함 → 어떻게 → 검증"
+
 
 def guidance_for(c: HarnessComponent) -> FieldGuidance | None:
     """component 에 맞는 가이드 반환 (prose-guideline 은 scope variant)."""
