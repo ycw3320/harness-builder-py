@@ -22,6 +22,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["harness_core*", "harness_fs*", "harness_app*", "harness_llm*"]
 
+# 번들 폰트(Pretendard)를 패키지에 포함 — pip install 시 .ttf 동반(한글 드롭아웃 방지)
+[tool.setuptools.package-data]
+harness_app = ["qt_shell/fonts/*.ttf"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
@@ -40,5 +44,6 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 "harness_core/export/scaffold_templates.py" = ["E501"]
 "harness_core/lint/lint.py" = ["E501"]
 "harness_app/guides.py" = ["E501"]
+"harness_app/view_model.py" = ["E501"]
 "harness_app/qt_shell/app.py" = ["E501"]
 "harness_llm/prompts.py" = ["E501"]
