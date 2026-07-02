@@ -706,7 +706,8 @@ class BuilderWindow(QMainWindow):
             QMessageBox.warning(self, "열기 실패", str(e))
             return
         # 수신 검증(해자의 두 번째 사용처): 가져오기 전에 '무엇을 하는지' 결정론으로 보여줌
-        if show_receive_review(self, ir, lint_ir(ir), vm.sim_compare_ir(ir)):
+        findings = lint_ir(ir, rulesets=("core", "security"))
+        if show_receive_review(self, ir, findings, vm.sim_compare_ir(ir)):
             self._example_ids = set()  # 파일에서 온 구성은 예시 아님 — load_ir 통지 이전 클리어
             self.state.load_ir(ir)
 
