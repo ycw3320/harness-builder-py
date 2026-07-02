@@ -41,4 +41,4 @@
 1. `ARCHITECTURE.md` → 2. `CONVENTIONS.md` → 3. `GLOSSARY.md` → 4. 계약 SPEC(IR/EXPORT/LINT/SIMULATOR) → 5. 작업 영역 SPEC(FS/STATE/PM2).
 
 ## 마일스톤
-PM1✅(코어) → PM2(프레임워크·직접쓰기) → PM3(기능 패리티 + 안내형 누적 흐름 + 역import) → PM4(패키징·MVP) → PM5(온보딩·완성도·강제수준 사다리·프리셋 확장).
+PM1✅(코어) → PM2✅(PySide6 확정·직접쓰기) → PM3✅(전 계층 패리티·인앱 LLM·역import) → PM4✅(exe 패키징) → PM5✅(온보딩·완성도·강제수준 사다리·프리셋 5종) → PM6✅(초심자 직관화 — 랜딩·before/after 시뮬 시연·체감→정의 아하·Pretendard 번들, [[ADR-0011]]) → PM7(예정: 통합 하네스 파일·lint 보안 룰팩·성숙도 레벨, 골든 게이트 2계층화 선행).

@@ -58,3 +58,13 @@ def test_patch_each_kind_field_validates():
 def test_all_layers_interactive():
     s = BuilderState("demo")
     assert all(item.interactive for item in vm.nav_items(s))
+
+
+def test_option_labels_match_options_length():
+    # PM6 2단 풀이: 콤보 표시 라벨은 원시 옵션과 개수 1:1(어긋나면 표시/값 매핑 붕괴).
+    from harness_core.ir.registry import kind_registry as _kr
+
+    for kind in _kr:
+        for spec in vm.field_specs(kind):
+            if spec.option_labels:
+                assert len(spec.option_labels) == len(spec.options), (kind, spec.name)

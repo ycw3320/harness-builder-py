@@ -6,9 +6,12 @@ Claude Code 하네스(`.claude/` + `CLAUDE.md`)를 GUI로 구성해 **로컬 프
 
 > TypeScript 웹 버전([ycw3320/harness-builder](https://github.com/ycw3320/harness-builder))을 Python 데스크톱으로 전환. 웹의 로컬 파일시스템 제약을 해소하고 "내려받아 즉시 진행"을 네이티브로 구현.
 
-## 현재 상태 — PM5 완료 (pytest 66 GREEN)
+## 현재 상태 — PM6 완료 (pytest 71 GREEN)
 
-PySide6/Qt 셸 + Apple 라이트/다크 테마 + 동적 CRUD(전 6계층·전 6 kind) + 프리셋 5종 + 강제수준 사다리 + 인앱 LLM(BYO 키) + 역import + exe 패키징까지 완료. 코어 산출물은 TS 버전과 **바이트 단위 동일**(골든 게이트).
+PM1~5(코어·Qt 셸·동적 CRUD·프리셋·인앱 LLM·역import·exe 패키징)에 더해 **PM6 초심자 직관화** 완료:
+랜딩(소개) 페이지 → **"하네스 없으면 ↔ 지금" before/after 시뮬 시연**(규칙 토글로 차단을 직접 꺼보는 체감→정의 아하) →
+용어 2단 풀이(쉬운 말+호버) → export "다음 단계" 가이드. 한글 렌더는 **Pretendard 번들**(OFL)로 통일.
+코어 산출물은 TS 버전과 **바이트 단위 동일**(골든 게이트).
 
 ## 다른 PC에서 시작하기 (Quick Start)
 
@@ -35,7 +38,7 @@ python -m pytest
 
 - **앱만 가볍게:** `pip install -e .` (PySide6+pydantic만, LLM·테스트 제외).
 - **인앱 LLM 미설치 시:** 외부 LLM 복사→붙여넣기 흐름이 기본 동작(앱은 정상 실행). API 키는 OS 자격증명관리자(keyring)에만 저장 — 코드·커밋·로그·QSettings에 미저장.
-- **비(非)Windows:** Qt는 크로스플랫폼이라 실행되나, 한글 폰트는 OS 폰트로 폴백(`make_app`이 malgun.ttf 부재 시 자동 스킵). CJK 폰트가 없으면 한글이 깨질 수 있다.
+- **한글 폰트:** [Pretendard](https://github.com/orioncactus/pretendard)(SIL OFL 1.1, `harness_app/qt_shell/fonts/OFL.txt`)를 번들해 어느 PC에서나 동일 렌더. 번들 누락 시 시스템 폰트(Malgun) 폴백.
 
 ## exe 빌드 (선택)
 
@@ -69,7 +72,7 @@ python -m pytest
 
 ## 문서
 
-설계·규칙·결정은 [`docs/00_INDEX.md`](docs/00_INDEX.md)에서 시작. 비가역 결정은 [`docs/DECISIONS/`](docs/DECISIONS/)(ADR-0001~0010).
+설계·규칙·결정은 [`docs/00_INDEX.md`](docs/00_INDEX.md)에서 시작. 비가역 결정은 [`docs/DECISIONS/`](docs/DECISIONS/)(ADR-0001~0011).
 
 ## 로드맵
 
@@ -78,4 +81,5 @@ python -m pytest
 - **PM3** ✅ 동적 CRUD(전 6계층·전 kind) + 데이터 구동 폼 + 인앱 LLM
 - **PM4** ✅ PyInstaller 패키징(`dist/HarnessBuilder.exe`)
 - **PM5** ✅ 완성도 미터 + 프리셋 5종 + 강제수준 사다리 + 온보딩 + 역import
-- **다음** 멀티타깃(targetTool)·코드서명/인스톨러·(선택) 자연어 컴파일러
+- **PM6** ✅ 초심자 직관화 — 랜딩·before/after 시뮬 시연·체감→정의 아하·용어 풀이·Pretendard 번들
+- **PM7(예정)** 통합 하네스 파일(.harness.json 저장=공유) + lint 보안 룰팩 + 성숙도 레벨 (골든 게이트 2계층화 선행)
