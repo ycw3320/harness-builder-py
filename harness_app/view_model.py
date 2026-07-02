@@ -6,6 +6,7 @@ PM3-B: 전 6계층 interactive, kind별 field_specs(데이터 구동 폼), 행�
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from harness_core.export.assemble_project import assemble_project
@@ -139,7 +140,24 @@ _OUTCOME_LABEL = {
     "blocked-by-permission": "권한 차단",
     "ask": "사용자 확인",
     "allowed": "통과",
+    "invalid": "평가 불가(패턴 오류)",
 }
+
+
+def _safe_simulate(ir, scenario: dict) -> dict:
+    """simulate 를 re.error 로부터 보호 — hook '대상 도구'는 자유 입력 regex 라
+    미완성 괄호('Bash(') 하나로 우패널 재빌드가 통째로 무너지던 결함 방어(코어 무수정)."""
+    try:
+        return simulate(ir, scenario)
+    except re.error:
+        return {
+            "action": scenario,
+            "outcome": "invalid",
+            "reasons": [
+                "hook '대상 도구' 패턴이 올바르지 않아 평가할 수 없어요 — 해당 규칙을 수정하세요"
+            ],
+        }
+
 
 # kind별 편집 필드 스펙 (스키마 필드와 1:1). id/layer/involvement/enabled/title 은 공통 처리.
 _SPECS: dict[str, list[FieldSpec]] = {
@@ -332,7 +350,7 @@ def sim_items(state: BuilderState) -> list[SimVM]:
     """라이브 결정론 시뮬레이터 (LLM 0회) — 기본 시나리오 평가."""
     out: list[SimVM] = []
     for scenario in default_scenarios:
-        r = simulate(state.ir, scenario)
+        r = _safe_simulate(state.ir, scenario)
         out.append(
             SimVM(
                 label=scenario["label"],
@@ -353,8 +371,8 @@ def sim_compare(state: BuilderState) -> list[SimCompareVM]:
     empty = HarnessIR(meta=state.ir.meta, components=[])
     out: list[SimCompareVM] = []
     for sc in default_scenarios:
-        before = simulate(empty, sc)
-        after = simulate(state.ir, sc)
+        before = _safe_simulate(empty, sc)
+        after = _safe_simulate(state.ir, sc)
         out.append(
             SimCompareVM(
                 label=sc["label"],
@@ -370,14 +388,35 @@ def sim_compare(state: BuilderState) -> list[SimCompareVM]:
     return out
 
 
-# 시뮬레이터 결과를 좌우하는 kind — 토글 리스트 대상(hook·permission-rule만 simulate 에 반영)
-_SIM_RULE_KINDS = ("hook", "permission-rule")
+def _rule_affects_sim(c) -> bool:
+    """simulate 가 실제로 반영하는 규칙만 — allow 권한·비차단 hook 은 토글해도 결과 불변이라
+    '꺼보세요—차단이 풀립니다' 서사가 거짓 인과가 되므로 목록에서 제외한다."""
+    if c.kind == "hook":
+        return c.event == "PreToolUse" and c.action == "deny"
+    if c.kind == "permission-rule":
+        return c.action in ("deny", "ask")
+    return False
 
 
 def sim_rules(state: BuilderState) -> list[SimRuleVM]:
-    """시뮬레이터 결과를 바꾸는 규칙(hook·permission-rule) 목록 — '꺼보세요' 토글용."""
+    """시뮬레이터 결과를 바꾸는 규칙 목록 — '꺼보세요' 토글용."""
     return [
         SimRuleVM(id=c.id, title=c.title, kind=c.kind, enabled=c.enabled)
         for c in state.ir.components
-        if c.kind in _SIM_RULE_KINDS
+        if _rule_affects_sim(c)
     ]
+
+
+def toggle_changes_sim(state: BuilderState, comp_id: str) -> bool:
+    """이 컴포넌트를 토글하면 시뮬 결과가 실제로 바뀌는지 — 통지 없이 가상 평가.
+
+    아하 배너('방금 본 게 하네스예요')를 결과가 진짜 변한 토글에만 붙이기 위한 판정.
+    """
+    cur = [_safe_simulate(state.ir, sc)["outcome"] for sc in default_scenarios]
+    comps = [
+        c.model_copy(update={"enabled": not c.enabled}) if c.id == comp_id else c
+        for c in state.ir.components
+    ]
+    hyp = HarnessIR(meta=state.ir.meta, components=comps)
+    new = [_safe_simulate(hyp, sc)["outcome"] for sc in default_scenarios]
+    return cur != new

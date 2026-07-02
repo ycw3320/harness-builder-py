@@ -8,11 +8,12 @@ build_qss 로 주입, 토글은 QApplication 스타일시트 런타임 스왑(�
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from string import Template
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, QSettings, Qt, QTimer, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -284,9 +285,6 @@ class RuleToggle(QWidget):
         self._render_indicator()
 
     def _render_indicator(self) -> None:
-        from PySide6.QtCore import QRectF
-        from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
-
         t = self._t
         pm = QPixmap(18, 18)
         pm.fill(Qt.GlobalColor.transparent)
@@ -450,13 +448,17 @@ class RowWidget(QFrame):
         promote_fn=None,
         is_example: bool = False,
         on_example_edit=None,
+        on_duplicate=None,
     ) -> None:
         super().__init__()
         self.setObjectName("rowCard")
         self._row = row
         self._state = state
+        self._tokens = tokens  # involvement/제목 in-place 갱신용(재빌드 없이 헤더만 갱신)
+        self._is_dark = is_dark
         self._llm_fill = llm_fill  # (kind, comp_id) 콜백 — 키 있을 때만 전달
         self._promote = promote_fn  # (comp_id) 콜백 — 강제수준 승격
+        self._on_duplicate = on_duplicate  # (comp_id) — 예시 표식 승계를 위해 윈도 경유
         # PM6-S5: 프리셋이 넣어준 '예시' 표식 — 편집 시 in-place 로 숨겨 포커스 보존.
         self._is_example = is_example
         self._on_example_edit = on_example_edit
@@ -476,21 +478,19 @@ class RowWidget(QFrame):
         self._header_w = QWidget()
         self._header_w.setFixedHeight(self.HEADER_H)
         self._header_w.setLayout(header)
-        header.addWidget(_dot(inv))
-        title = QLabel()
-        title.setStyleSheet(f"font-weight: 600; color: {tokens['text']};")
-        # 긴 제목이 헤더 너비를 밀어 가로 스크롤/잘림을 만들지 않게 말줄임(전체는 툴팁).
-        title.setText(title.fontMetrics().elidedText(row.title, Qt.TextElideMode.ElideRight, 240))
-        if row.title:
-            title.setToolTip(row.title)
-        header.addWidget(title)
+        self._dot_lbl = _dot(inv)
+        header.addWidget(self._dot_lbl)
+        self._title_lbl = QLabel()
+        self._title_lbl.setStyleSheet(f"font-weight: 600; color: {tokens['text']};")
+        self._update_title(row.title)  # 말줄임+툴팁(제목 편집 시 in-place 재갱신)
+        header.addWidget(self._title_lbl)
         header.addStretch(1)
-        pill = QLabel(row.involvement_label)
-        pill.setStyleSheet(
+        self._pill = QLabel(row.involvement_label)
+        self._pill.setStyleSheet(
             f"background: {_rgba(inv, 0.24 if is_dark else 0.14)}; color: {inv};"
             f"border-radius: 9px; padding: 1px 9px; font-size: 11px; font-weight: 600;"
         )
-        header.addWidget(pill)
+        header.addWidget(self._pill)
         # PM6: collapsed 헤더에서 kind(hook·policy-doc 등 개발 전문용어) 라벨 제거 —
         # 강제수준 배지(권고/문서/자동 차단)가 사용자 언어로 이미 종류를 구분하고, 헤더 폭도 확보.
         if row.enforcement:
@@ -513,7 +513,7 @@ class RowWidget(QFrame):
         for label, tip, fixed, fn in (
             ("↑", "위로", True, lambda: self._state.move(self._row.id, "up")),
             ("↓", "아래로", True, lambda: self._state.move(self._row.id, "down")),
-            ("복제", "복제", False, lambda: self._state.duplicate(self._row.id)),
+            ("복제", "복제", False, lambda: self._do_duplicate()),
             ("삭제", "삭제", False, lambda: self._state.remove(self._row.id)),
         ):
             b = QPushButton(label)
@@ -560,7 +560,8 @@ class RowWidget(QFrame):
 
         title_le = QLineEdit(row.title)
         title_le.setPlaceholderText("제목")
-        title_le.textChanged.connect(lambda t: self._patch("title", t))
+        # 제목은 _signature 미추적(타이핑마다 재빌드=포커스 파괴 방지) → 헤더 라벨을 in-place 갱신
+        title_le.textChanged.connect(lambda t: (self._patch("title", t), self._update_title(t)))
         ed.addWidget(self._labeled("제목", title_le))
 
         inv_combo = QComboBox()
@@ -569,7 +570,13 @@ class RowWidget(QFrame):
             inv_combo.addItem(lab)
             inv_keys.append(key)
         inv_combo.setCurrentIndex(inv_keys.index(row.involvement))
-        inv_combo.currentIndexChanged.connect(lambda i: self._patch("involvement", inv_keys[i]))
+        # 결정방식도 in-place(색점·pill) — 구조 재빌드로 라우팅하면 편집 중 행이 접혀버림
+        inv_combo.currentIndexChanged.connect(
+            lambda i: (
+                self._patch("involvement", inv_keys[i]),
+                self._update_involvement(inv_keys[i]),
+            )
+        )
         ed.addWidget(self._labeled("결정방식", inv_combo))
 
         for s in specs:
@@ -620,8 +627,23 @@ class RowWidget(QFrame):
             return DictEditor(value or {}, lambda v: self._patch(name, v))
         le = QLineEdit("" if value is None else str(value))
         le.setPlaceholderText(spec.placeholder)
-        le.textChanged.connect(lambda t: self._patch(name, t))
+        if (
+            name == "matcher_tool"
+        ):  # 자유 입력 regex — 잘못된 패턴은 시각 경고(시뮬은 '평가 불가'로 강등됨)
+            le.textChanged.connect(lambda t, w=le: self._patch_matcher(name, t, w))
+        else:
+            le.textChanged.connect(lambda t: self._patch(name, t))
         return le
+
+    def _patch_matcher(self, name: str, text: str, widget: QLineEdit) -> None:
+        try:
+            re.compile(text)
+            widget.setStyleSheet("")  # QSS 복원
+            widget.setToolTip("")
+        except re.error as e:
+            widget.setStyleSheet("border: 1px solid #C9362B;")
+            widget.setToolTip(f"패턴 오류: {e} — 예: Write|Edit ( | 은 '또는')")
+        self._patch(name, text)  # 상태는 항상 반영(시뮬이 '평가 불가'로 정직하게 표시)
 
     def _guide_box(self, guide: dict) -> QWidget:
         box = QFrame()
@@ -664,6 +686,30 @@ class RowWidget(QFrame):
         ask.setWordWrap(True)
         v.addWidget(ask)
         return box
+
+    def _update_title(self, text: str) -> None:
+        """헤더 제목 라벨 in-place 갱신(말줄임+툴팁) — 중앙 재빌드 없이 제목 편집 즉시 반영."""
+        fm = self._title_lbl.fontMetrics()
+        self._title_lbl.setText(fm.elidedText(text, Qt.TextElideMode.ElideRight, 240))
+        self._title_lbl.setToolTip(text if text else "")
+
+    def _update_involvement(self, key: str) -> None:
+        """헤더 색점·pill in-place 갱신 — involvement 변경이 행을 파괴(접힘)하지 않게."""
+        inv = self._tokens[_INV_KEY[key]]
+        self._dot_lbl.setStyleSheet(f"background: {inv}; border-radius: 5px;")
+        label = next((lab for lab, k in vm.INVOLVEMENT_OPTIONS if k == key), key)
+        self._pill.setText(label)
+        self._pill.setStyleSheet(
+            f"background: {_rgba(inv, 0.24 if self._is_dark else 0.14)}; color: {inv};"
+            f"border-radius: 9px; padding: 1px 9px; font-size: 11px; font-weight: 600;"
+        )
+
+    def _do_duplicate(self) -> None:
+        """복제 — 예시 표식 승계가 필요하므로 윈도 콜백 경유(없으면 직접)."""
+        if self._on_duplicate is not None:
+            self._on_duplicate(self._row.id)
+        else:
+            self._state.duplicate(self._row.id)
 
     def _patch(self, name: str, value) -> None:
         if self._is_example:  # 첫 편집 = 더 이상 '예시' 아님 — 표식 in-place 숨김(포커스 보존)
@@ -823,18 +869,23 @@ class LandingPage(QWidget):
 
 
 class BuilderWindow(QMainWindow):
-    def __init__(self, state: BuilderState | None = None) -> None:
+    def __init__(
+        self, state: BuilderState | None = None, settings: QSettings | None = None
+    ) -> None:
         super().__init__()
         # PM6-S1: 빈 캔버스(minimal) 대신 '작동하는 예시'(safety-first)로 시작 —
         # 첫 화면에서 before/after 차단 시연이 보여야 초심자 아하 모먼트가 가능.
         self.state = state or BuilderState("my-project", preset="safety-first")
+        # settings 주입은 테스트 격리용(미지정 시 사용자 QSettings)
+        self._settings = settings or QSettings("harness-builder", "qt-shell")
         # PM6-S4: 규칙을 처음 꺼본(=인과 체감) 직후 정의를 페이드인하는 '체감→정의' 서사 상태.
-        self._aha_revealed = False
-        self._aha_animated = False
+        # 아하는 persist — 랜딩 스킵과 결합해도 정의 노출이 0회가 되지 않게 재실행 시 배너 유지.
+        self._aha_revealed = self._settings.value("aha_seen", False, type=bool)
+        self._aha_animated = self._aha_revealed  # 복원 시 애니메이션 없이 정적 표시
         # PM6-S5: 프리셋이 넣어준 시드 = '예시'. 사용자가 편집하면 해당 id 를 제거(배너 사라짐).
         self._example_ids: set[str] = {c.id for c in self.state.ir.components}
         self._reseed_examples = False  # 프리셋 교체 시 1회 재계산 플래그(이중 재빌드·깜빡임 방지)
-        self._settings = QSettings("harness-builder", "qt-shell")
+        self._dup_prev_ids: set[str] | None = None  # 예시 복제 시 새 id 감지용(단일 재빌드 유지)
         self.theme_name = os.environ.get("HB_THEME") or self._settings.value("theme", "light")
         if self.theme_name not in THEMES:
             self.theme_name = "light"
@@ -856,12 +907,17 @@ class BuilderWindow(QMainWindow):
         self._stack.addWidget(LandingPage(self._enter_builder))  # index 0: 소개
         self._stack.addWidget(splitter)  # index 1: 빌더
         self.setCentralWidget(self._stack)
+        # 재방문자는 빌더로 직행(랜딩은 '소개' 버튼으로 상시 재방문 가능).
+        # 정의 노출은 persist 된 아하 배너가 담당하므로 스킵해도 0회가 되지 않는다.
+        if self._settings.value("landing_seen", False, type=bool):
+            self._stack.setCurrentIndex(1)
 
         self._sig: tuple | None = None
         self.state.subscribe(self._on_change)
         self._apply_theme()
 
     def _enter_builder(self) -> None:
+        self._settings.setValue("landing_seen", True)
         self._stack.setCurrentIndex(1)
 
     def _show_landing(self) -> None:
@@ -895,11 +951,13 @@ class BuilderWindow(QMainWindow):
         return w
 
     def _signature(self) -> tuple:
+        # involvement 는 미추적 — 콤보 변경이 구조 재빌드로 라우팅되면 편집 중 행이 파괴(접힘)됨.
+        # 헤더 색점·pill 은 RowWidget._update_involvement 가 in-place 갱신한다.
         return (
             self.theme_name,
             self.state.selected_layer,
             self.state.advanced_mode,
-            tuple((c.id, c.enabled, c.involvement) for c in self.state.ir.components),
+            tuple((c.id, c.enabled) for c in self.state.ir.components),
         )
 
     def _on_change(self) -> None:
@@ -907,6 +965,9 @@ class BuilderWindow(QMainWindow):
         if self._reseed_examples:  # 프리셋 교체 직후 1회: 새 시드를 '예시'로(단일 재빌드 내에서)
             self._reseed_examples = False
             self._example_ids = {c.id for c in self.state.ir.components}
+        if self._dup_prev_ids is not None:  # 예시 복제 직후 1회: 새 id 에 예시 표식 승계
+            self._example_ids |= {c.id for c in self.state.ir.components} - self._dup_prev_ids
+            self._dup_prev_ids = None
         sig = self._signature()
         if sig != self._sig:
             self._sig = sig
@@ -942,7 +1003,7 @@ class BuilderWindow(QMainWindow):
         title = QLabel("구성 영역")
         title.setObjectName("h1")
         v.addWidget(title)
-        hint = QLabel("6계층을 차례로 채우면 하네스가 완성됩니다.")
+        hint = QLabel("6개 영역을 차례로 채우면 하네스가 완성됩니다.")
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         v.addWidget(hint)
@@ -1011,6 +1072,7 @@ class BuilderWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._center_scroll = scroll  # 점프 시 ensureWidgetVisible 용(화면 밖 무반응 방지)
         holder = QWidget()
         rows_lay = QVBoxLayout(holder)
         rows_lay.setContentsMargins(0, 0, 0, 0)
@@ -1027,6 +1089,7 @@ class BuilderWindow(QMainWindow):
                 self._promote_component,
                 is_example=r.id in self._example_ids,
                 on_example_edit=self._on_example_edited,
+                on_duplicate=self._duplicate_component,
             )
             self._rows.append(rw)
             rows_lay.addWidget(rw)
@@ -1038,6 +1101,16 @@ class BuilderWindow(QMainWindow):
     def _on_example_edited(self, comp_id: str) -> None:
         """예시 항목을 사용자가 편집 → 더 이상 예시 아님(재빌드 시 배너 미표시)."""
         self._example_ids.discard(comp_id)
+
+    def _duplicate_component(self, comp_id: str) -> None:
+        """복제 — 원본이 '미편집 예시'면 사본도 예시로 승계(태그·export 경고 누락 방지).
+
+        새 id 는 복제 후에야 알 수 있으므로, 이전 id 집합을 기억해 _on_change 가
+        차집합으로 감지한다(_reseed_examples 와 같은 단일 재빌드 패턴).
+        """
+        if comp_id in self._example_ids:
+            self._dup_prev_ids = {c.id for c in self.state.ir.components}
+        self.state.duplicate(comp_id)
 
     def _preset_toggle(self) -> QWidget:
         # PM6-S5: 프리셋 비교 — 항목 툴팁 + 현재 프리셋 1줄 설명으로 '무엇이 채워지는지' 안내.
@@ -1180,6 +1253,14 @@ class BuilderWindow(QMainWindow):
                 v.addWidget(hint)
             for r in rules:
                 v.addWidget(self._rule_toggle(r))
+        else:  # 차단 규칙 0개(빈 시작·가져오기 등) — 아하 도달 경로 안내(끊긴 서사 폴백)
+            none_hint = QLabel(
+                "차단 규칙(hook·권한)을 추가하면 여기서 꺼보며 효과를 확인할 수 있어요 — "
+                "좌측 '가드레일' 영역에서 시작하세요."
+            )
+            none_hint.setObjectName("faint")
+            none_hint.setWordWrap(True)
+            v.addWidget(none_hint)
 
         v.addWidget(self._section("정합성 검사"))
         lints = vm.lint_items(self.state)
@@ -1226,6 +1307,8 @@ class BuilderWindow(QMainWindow):
             return (t["warn"], "(위험)") if column == "before" else (t["text_muted"], "")
         if raw == "ask":
             return (t["warn"], "")  # 라벨 '사용자 확인' 자체가 의미 전달
+        if raw == "invalid":
+            return (t["danger"], "")  # hook 패턴 오류 — 규칙 수정 필요
         return (t["ok"], "(안전)")  # blocked-by-hook / blocked-by-permission
 
     def _sim_line(self, prefix: str, label: str, raw: str, column: str, blocked_by=None) -> QLabel:
@@ -1266,8 +1349,14 @@ class BuilderWindow(QMainWindow):
         )
 
     def _on_rule_toggle(self, comp_id: str) -> None:
-        """첫 토글 = 인과 체감 → 정의 페이드인 트리거 후 실제 토글."""
-        self._aha_revealed = True
+        """결과가 '실제로 변하는' 첫 토글 = 인과 체감 → 정의 페이드인 트리거 후 실제 토글.
+
+        무의미 토글(결과 불변)에 배너를 붙이면 체감→정의 서사가 거짓 인과가 되므로,
+        가상 평가(toggle_changes_sim)로 판정한다. 아하는 QSettings 로 persist(재실행 시 유지).
+        """
+        if not self._aha_revealed and vm.toggle_changes_sim(self.state, comp_id):
+            self._aha_revealed = True
+            self._settings.setValue("aha_seen", True)
         self.state.toggle(comp_id)  # _notify → _rebuild_right(배너 등장 + 결과 역전)
 
     def _aha_banner(self) -> QWidget:
@@ -1299,7 +1388,7 @@ class BuilderWindow(QMainWindow):
         return card
 
     def _jump_to_component(self, comp_id: str) -> None:
-        """시뮬레이터 차단 줄 → 그 결과를 만든 컴포넌트로 이동·펼침."""
+        """시뮬레이터 차단 줄 → 그 결과를 만든 컴포넌트로 이동·펼침·스크롤."""
         comp = next((c for c in self.state.ir.components if c.id == comp_id), None)
         if comp is None:
             return
@@ -1308,7 +1397,17 @@ class BuilderWindow(QMainWindow):
         for rw in getattr(self, "_rows", []):
             if rw._row.id == comp_id:
                 rw.set_open(True)
+                # 대상이 뷰포트 밖이면 '무반응'으로 보임 — 펼침 애니(170ms) 종료 후 스크롤 보장
+                QTimer.singleShot(200, lambda w=rw: self._scroll_to_row(w))
                 break
+
+    def _scroll_to_row(self, rw: QWidget) -> None:
+        try:
+            scroll = getattr(self, "_center_scroll", None)
+            if scroll is not None:
+                scroll.ensureWidgetVisible(rw, 0, 60)
+        except RuntimeError:
+            pass  # 타이머 사이 재빌드로 위젯이 파괴된 경우(무해)
 
     def _theme_toggle(self) -> QWidget:
         track = QWidget()
@@ -1369,16 +1468,21 @@ class BuilderWindow(QMainWindow):
         steps = QLabel(
             "① 이 폴더를 프로젝트 루트에 두세요(이미 프로젝트라면 그대로).\n"
             "② 그 폴더에서 Claude Code를 실행하세요 — 터미널에서 claude\n"
+            "   터미널이 처음이라면: [폴더 열기] 후 폴더 창 주소칸에 cmd 입력 → 엔터 → 붙여넣기.\n"
             "③ 방금 시뮬레이터에서 본 차단(.env·강제 push)이 실제로 적용됩니다."
         )
         steps.setObjectName("muted")
         steps.setWordWrap(True)
         v.addWidget(steps)
         row = QHBoxLayout()
-        copyb = QPushButton("claude 명령 복사")
+        copyb = QPushButton("이동+실행 명령 복사")
         copyb.setObjectName("addBtn")
         copyb.setCursor(Qt.CursorShape.PointingHandCursor)
-        copyb.clicked.connect(lambda: QApplication.clipboard().setText("claude"))
+        copyb.setToolTip(
+            "터미널에 붙여넣으면 폴더 이동 후 Claude Code 가 실행됩니다 (cmd·PowerShell 공용)"
+        )
+        # cd "..." 는 cmd·PowerShell 양쪽에서 동작(두 줄 붙여넣기 = 순차 실행)
+        copyb.clicked.connect(lambda: QApplication.clipboard().setText(f'cd "{dest}"\nclaude'))
         row.addWidget(copyb)
         openb = QPushButton("폴더 열기")
         openb.setObjectName("addBtn")
@@ -1413,8 +1517,8 @@ class BuilderWindow(QMainWindow):
             self, "가져오기", f"{n}개 구성요소를 불러옵니다. 현재 작업을 대체할까요?"
         )
         if ans == QMessageBox.StandardButton.Yes:
+            self._example_ids = set()  # 가져온 구성은 실제 설정 — load_ir 통지 '이전'에 클리어
             self.state.load_ir(ir)
-            self._example_ids = set()  # 가져온 구성은 사용자의 실제 설정 — 예시 아님
 
     def _promote_component(self, comp_id: str) -> None:
         comp = next((c for c in self.state.ir.components if c.id == comp_id), None)
@@ -1461,6 +1565,7 @@ class BuilderWindow(QMainWindow):
         if tf and data.get(tf):
             patch["title"] = str(data[tf])[:60]
         patch["intent"] = {"raw": intent.strip(), "compiled_by": "llm", "confidence": 0.9}
+        self._example_ids.discard(comp_id)  # AI로 채움 = 더 이상 '미편집 예시' 아님(오카운트 방지)
         self.state.patch(comp_id, patch)
         self._force_rebuild()
         for rw in self._rows:
