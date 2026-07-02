@@ -630,19 +630,26 @@ class RowWidget(QFrame):
         if (
             name == "matcher_tool"
         ):  # 자유 입력 regex — 잘못된 패턴은 시각 경고(시뮬은 '평가 불가'로 강등됨)
-            le.textChanged.connect(lambda t, w=le: self._patch_matcher(name, t, w))
+            self._apply_matcher_style(le, le.text(), spec.tip)  # 초기값도 검증(재빌드 후 경고 유지)
+            le.textChanged.connect(
+                lambda t, w=le, tip=spec.tip: self._patch_matcher(name, t, w, tip)
+            )
         else:
             le.textChanged.connect(lambda t: self._patch(name, t))
         return le
 
-    def _patch_matcher(self, name: str, text: str, widget: QLineEdit) -> None:
+    @staticmethod
+    def _apply_matcher_style(widget: QLineEdit, text: str, tip: str) -> None:
         try:
             re.compile(text)
             widget.setStyleSheet("")  # QSS 복원
-            widget.setToolTip("")
+            widget.setToolTip(tip)  # 2단 풀이 툴팁 복원(빈 문자열로 소거 금지)
         except re.error as e:
             widget.setStyleSheet("border: 1px solid #C9362B;")
             widget.setToolTip(f"패턴 오류: {e} — 예: Write|Edit ( | 은 '또는')")
+
+    def _patch_matcher(self, name: str, text: str, widget: QLineEdit, tip: str) -> None:
+        self._apply_matcher_style(widget, text, tip)
         self._patch(name, text)  # 상태는 항상 반영(시뮬이 '평가 불가'로 정직하게 표시)
 
     def _guide_box(self, guide: dict) -> QWidget:
@@ -909,7 +916,9 @@ class BuilderWindow(QMainWindow):
         self.setCentralWidget(self._stack)
         # 재방문자는 빌더로 직행(랜딩은 '소개' 버튼으로 상시 재방문 가능).
         # 정의 노출은 persist 된 아하 배너가 담당하므로 스킵해도 0회가 되지 않는다.
-        if self._settings.value("landing_seen", False, type=bool):
+        # 스킵 조건 = 랜딩을 봤고 '아하(정의)'까지 만난 경우만 — 정의 노출 0회 불변식 보장.
+        # (랜딩만 스치고 종료한 초심자는 다음 실행에도 랜딩부터)
+        if self._settings.value("landing_seen", False, type=bool) and self._aha_revealed:
             self._stack.setCurrentIndex(1)
 
         self._sig: tuple | None = None
@@ -1242,12 +1251,25 @@ class BuilderWindow(QMainWindow):
         if self._aha_revealed:
             v.addWidget(self._aha_banner())
         v.addWidget(self._section("하네스 없으면 ↔ 지금 · 실행 전 시뮬레이터(LLM 0회)"))
-        for s in vm.sim_compare(self.state):
+        compare = vm.sim_compare(self.state)
+        has_invalid = any(s.after_raw == "invalid" for s in compare)
+        for s in compare:
             v.addWidget(self._sim_compare_row(s))
         rules = vm.sim_rules(self.state)
         if rules:
-            if not self._aha_revealed:
-                hint = QLabel("아래 규칙을 꺼보세요 — 차단이 풀립니다")
+            # 힌트는 상황별 1개: 패턴 오류 > 꺼보세요(아하 전) > 허용뿐 안내 — 거짓 약속 금지
+            if has_invalid:
+                hint_text = (
+                    "패턴 오류를 먼저 수정하세요 — 위 붉은 줄을 클릭하면 해당 규칙으로 이동합니다"
+                )
+            elif any(r.affects_sim for r in rules):
+                hint_text = (
+                    "아래 규칙을 꺼보세요 — 차단이 풀립니다" if not self._aha_revealed else ""
+                )
+            else:  # 허용 규칙뿐(speed 등) — 토글해도 결과가 안 변하므로 '꺼보세요' 약속 금지
+                hint_text = "지금 규칙은 모두 허용이라 차단 시연이 없어요 — 가드레일에서 차단 규칙을 추가해보세요"
+            if hint_text:
+                hint = QLabel(hint_text)
                 hint.setObjectName("faint")
                 hint.setWordWrap(True)
                 v.addWidget(hint)
@@ -1344,8 +1366,11 @@ class BuilderWindow(QMainWindow):
         return card
 
     def _rule_toggle(self, r: vm.SimRuleVM) -> QWidget:
+        # allow 권한 등은 시뮬 무영향이지만 enabled 는 export 포함 여부를 좌우하는 실기능 —
+        # 목록에서 빼는 대신 배지로 구분(토글 수단 소멸 방지).
+        title = r.title if r.affects_sim else f"{r.title} · 시뮬 영향 없음"
         return RuleToggle(
-            r.title, r.enabled, self.tokens, lambda _on, cid=r.id: self._on_rule_toggle(cid)
+            title, r.enabled, self.tokens, lambda _on, cid=r.id: self._on_rule_toggle(cid)
         )
 
     def _on_rule_toggle(self, comp_id: str) -> None:
@@ -1481,8 +1506,10 @@ class BuilderWindow(QMainWindow):
         copyb.setToolTip(
             "터미널에 붙여넣으면 폴더 이동 후 Claude Code 가 실행됩니다 (cmd·PowerShell 공용)"
         )
-        # cd "..." 는 cmd·PowerShell 양쪽에서 동작(두 줄 붙여넣기 = 순차 실행)
-        copyb.clicked.connect(lambda: QApplication.clipboard().setText(f'cd "{dest}"\nclaude'))
+        # pushd: cmd 에서 드라이브 전환 포함(cd 는 /d 없인 드라이브 미전환), PowerShell 은
+        # Push-Location 별칭으로 동일. 트레일링 개행 = 마지막 명령까지 자동 실행.
+        cmd_text = f'pushd "{os.path.normpath(dest)}"\nclaude\n'
+        copyb.clicked.connect(lambda: QApplication.clipboard().setText(cmd_text))
         row.addWidget(copyb)
         openb = QPushButton("폴더 열기")
         openb.setObjectName("addBtn")

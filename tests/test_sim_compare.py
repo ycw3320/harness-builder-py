@@ -36,11 +36,28 @@ def test_sim_compare_minimal_has_no_contrast():
     assert all(r.changed is False for r in rows)
 
 
-def test_sim_rules_lists_only_simulatable_kinds():
+def test_sim_rules_flags_affects_sim():
+    # allow 권한은 목록에 남되(=export on/off 실기능 유지) 시뮬 무영향 플래그로 구분.
     rules = vm.sim_rules(BuilderState("demo", preset="safety-first"))
     assert {r.kind for r in rules} <= {"hook", "permission-rule"}
-    assert any(r.kind == "hook" for r in rules)
-    assert all(r.enabled for r in rules)
+    by_title = {r.title: r for r in rules}
+    assert by_title["테스트 실행 허용"].affects_sim is False
+    assert by_title[".env 쓰기 차단 (시크릿 보호)"].affects_sim is True
+    assert any(r.affects_sim for r in rules)
+    # speed(allow 전용): 토글은 가능하나 시연(꺼보세요) 대상은 0
+    sp = vm.sim_rules(BuilderState("demo", preset="speed"))
+    assert sp and all(not r.affects_sim for r in sp)
+
+
+def test_invalid_matcher_identifies_offender():
+    # 깨진 hook 패턴 → 전 시나리오 '평가 불가' + 오류 hook 을 blockedBy 로 특정(클릭→점프 가능).
+    st = BuilderState("demo", preset="safety-first")
+    hook = next(c for c in st.ir.components if c.kind == "hook")
+    st.patch(hook.id, {"matcher_tool": "Bash("})
+    rows = vm.sim_compare(st)
+    assert all(r.after_raw == "invalid" for r in rows)
+    assert all(r.after_blocked_by == hook.id for r in rows)
+    assert all(hook.title in r.after_reason for r in rows)
 
 
 def test_toggle_off_reverses_block():
