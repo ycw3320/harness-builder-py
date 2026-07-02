@@ -377,17 +377,22 @@ def sim_items(state: BuilderState) -> list[SimVM]:
 
 
 def sim_compare(state: BuilderState) -> list[SimCompareVM]:
-    """before/after 시연 — 빈 IR(규칙 0개)과 현재 IR을 같은 시나리오로 평가해 대비.
+    """before/after 시연(현재 상태) — sim_compare_ir 위임."""
+    return sim_compare_ir(state.ir)
+
+
+def sim_compare_ir(ir: HarnessIR) -> list[SimCompareVM]:
+    """before/after 시연 — 빈 IR(규칙 0개)과 대상 IR을 같은 시나리오로 평가해 대비.
 
     '하네스 없으면 vs 지금'을 한 화면에서 보여주는 초심자 아하 엔진. 코어 무수정 —
     결정론 simulate 를 빈 IR 로 한 번 더 호출할 뿐(LLM 0회 유지). before 는 정직하게
-    '규칙 없으면'(빈 IR) 기준이라 과장 없이 대비된다.
+    '규칙 없으면'(빈 IR) 기준. PM7: 수신 검증(받은 .harness.json 미리보기)도 재사용.
     """
-    empty = HarnessIR(meta=state.ir.meta, components=[])
+    empty = HarnessIR(meta=ir.meta, components=[])
     out: list[SimCompareVM] = []
     for sc in default_scenarios:
         before = _safe_simulate(empty, sc)
-        after = _safe_simulate(state.ir, sc)
+        after = _safe_simulate(ir, sc)
         out.append(
             SimCompareVM(
                 label=sc["label"],

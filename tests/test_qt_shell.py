@@ -177,3 +177,31 @@ def test_matcher_field_visual_warning_and_tip_restore(qapp, temp_settings):
     le.setText("Write|Edit")
     assert le.styleSheet() == ""
     assert "검사할 도구" in le.toolTip()  # spec.tip 복원(빈 문자열 소거 회귀 감지)
+
+
+def test_save_and_open_harness_file(qapp, temp_settings, tmp_path, monkeypatch):
+    """PM7-S2: 저장→열기 실경로(다이얼로그 모킹) — 수신 검증 통과 시 상태 대체·예시 클리어."""
+    from harness_app.qt_shell import app as appmod
+
+    win = _make_window(qapp, temp_settings)
+    win._enter_builder()
+    f = tmp_path / "demo.harness.json"
+    monkeypatch.setattr(
+        appmod.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(f), ""))
+    )
+    monkeypatch.setattr(appmod.QMessageBox, "information", staticmethod(lambda *a, **k: None))
+    win._on_save_file()
+    assert f.exists() and '"irVersion"' in f.read_text(encoding="utf-8")
+
+    # 열기: 수신 검증 다이얼로그는 승인으로 모킹(내용은 dialogs 단위에서 렌더 스모크)
+    win2 = _make_window(qapp, temp_settings, preset="minimal")
+    win2._enter_builder()
+    assert win2._example_ids  # minimal 시드도 예시
+    monkeypatch.setattr(
+        appmod.QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(f), ""))
+    )
+    monkeypatch.setattr(appmod, "show_receive_review", lambda *a, **k: True)
+    win2._on_open_file()
+    qapp.processEvents()
+    assert win2._example_ids == set()
+    assert any(c.kind == "hook" for c in win2.state.ir.components)  # safety-first 내용으로 대체됨
