@@ -5,12 +5,19 @@ import pathlib
 import pytest
 
 _GOLDEN = pathlib.Path(__file__).parent / "golden"
+# 2계층 골든(ADR-0012):
+# frozen=TS 기원 박제(영구 불변) / extended=Python 자체 박제(신규 코어 ADD 전용)
+_GOLDEN_TIERS = (_GOLDEN / "frozen", _GOLDEN / "extended")
 
 
 @pytest.fixture
 def golden():
     def _load(name: str):
-        return json.loads((_GOLDEN / f"{name}.json").read_text(encoding="utf-8"))
+        for tier in _GOLDEN_TIERS:
+            p = tier / f"{name}.json"
+            if p.exists():
+                return json.loads(p.read_text(encoding="utf-8"))
+        raise FileNotFoundError(f"golden fixture 없음: {name} (frozen/extended 모두)")
 
     return _load
 
