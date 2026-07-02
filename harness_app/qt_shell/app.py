@@ -543,6 +543,11 @@ class RowWidget(QFrame):
         self._anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
         self._anim.finished.connect(self._on_anim_done)
 
+    @property
+    def row_id(self) -> str:
+        """행의 컴포넌트 id(읽기 전용) — 외부(BuilderWindow)가 사적 _row 를 직접 읽던 경계 위반 해소."""
+        return self._row.id
+
     # 편집 폼 구성 (값 설정 후 시그널 연결 → 초기 patch 폭주 방지) ---
     def _build_editor(self, row: vm.RowVM, specs: list) -> QWidget:
         editor = QWidget()
@@ -1133,11 +1138,11 @@ class BuilderWindow(QMainWindow):
             cb.addItem(f"프리셋 · {label}")
             cb.setItemData(len(keys), _PRESET_DESC.get(key, ""), Qt.ItemDataRole.ToolTipRole)
             keys.append(key)
-        if self.state._preset in keys:
-            cb.setCurrentIndex(keys.index(self.state._preset))
+        if self.state.preset in keys:
+            cb.setCurrentIndex(keys.index(self.state.preset))
         cb.currentIndexChanged.connect(lambda i: self._on_preset_change(keys[i]))
         col.addWidget(cb)
-        desc = QLabel(_PRESET_DESC.get(self.state._preset, ""))
+        desc = QLabel(_PRESET_DESC.get(self.state.preset, ""))
         desc.setObjectName("faint")
         desc.setWordWrap(True)
         col.addWidget(desc)
@@ -1420,7 +1425,7 @@ class BuilderWindow(QMainWindow):
         if self.state.selected_layer != comp.layer:
             self.state.set_selected_layer(comp.layer)  # 중앙 재빌드(_rows 갱신)
         for rw in getattr(self, "_rows", []):
-            if rw._row.id == comp_id:
+            if rw.row_id == comp_id:
                 rw.set_open(True)
                 # 대상이 뷰포트 밖이면 '무반응'으로 보임 — 펼침 애니(170ms) 종료 후 스크롤 보장
                 QTimer.singleShot(200, lambda w=rw: self._scroll_to_row(w))
@@ -1558,7 +1563,7 @@ class BuilderWindow(QMainWindow):
         self.state.replace(comp_id, promoted)
         self.state.set_selected_layer(promoted.layer)  # 승격 결과(가드레일)가 보이도록
         for rw in self._rows:
-            if rw._row.id == promoted.id:
+            if rw.row_id == promoted.id:
                 rw.set_open(True)
                 break
 
@@ -1596,7 +1601,7 @@ class BuilderWindow(QMainWindow):
         self.state.patch(comp_id, patch)
         self._force_rebuild()
         for rw in self._rows:
-            if rw._row.id == comp_id:
+            if rw.row_id == comp_id:
                 rw.set_open(True)
                 break
 
