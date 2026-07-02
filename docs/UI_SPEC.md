@@ -1,6 +1,6 @@
 # UI 명세 (골격 — PM3에서 본문)
 
-> 프레임워크 확정(PM2) 후 본문 작성. 현재는 목차·원칙만.
+> **현행 SSOT: PM6 실물 UI 는 `harness_app/qt_shell/app.py` 가 기준이다**(랜딩 페이지·before/after 시뮬 시연·아하 배너·용어 2단 풀이 포함 — 아래 목차는 PM2 시점 골격으로 일부 구식). 본문 문서화는 app.py 분해(R#8) 시 함께 갱신.
 
 ## 목차(예정)
 - 3-pane 레이아웃(좌 nav / 중 center / 우 right) — `B2 shell`

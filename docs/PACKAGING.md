@@ -15,11 +15,12 @@ python packaging/build_exe.py         # → dist/HarnessBuilder.exe
 
 ## 실행·배포
 - `dist/HarnessBuilder.exe` 더블클릭 실행(설치 불요). 첫 실행은 onefile 임시 추출로 수초 소요.
-- 한글 폰트는 런타임에 `C:/Windows/Fonts/malgun.ttf` 로드(Windows 기본 포함).
+- 한글 폰트는 **번들 Pretendard 우선**(`--add-data` 로 `harness_app/qt_shell/fonts/` 동봉, OFL.txt 포함) — 번들 누락 시 시스템 malgun 폴백. 소형 크기 가로획 드롭아웃('안전벨ㅌ' 현상) 방지를 위해 `PreferNoHinting` 적용.
 - 테마·LLM 모델 선택은 `QSettings`("harness-builder"), API 키는 OS 자격증명관리자에 저장(exe 에 미포함).
 
 ## 검증
 - 빌드 후 exe 실행 → 창 표시 확인. 오프라인 기본(키 없으면 복사→붙여넣기), 'LLM 설정'에서 키 입력 시 'AI로 채우기' 활성.
+- **적용 폰트가 Pretendard 인지 확인**(제목 렌더가 시스템 Malgun 과 다름; 폴백이면 --add-data 경로 점검).
 - 폴더 생성(write_tree)·기존 폴더 가져오기(import) 동작 확인.
 
 ## 대안(참고)

@@ -22,9 +22,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["harness_core*", "harness_fs*", "harness_app*", "harness_llm*"]
 
-# 번들 폰트(Pretendard)를 패키지에 포함 — pip install 시 .ttf 동반(한글 드롭아웃 방지)
+# 번들 폰트(Pretendard)를 패키지에 포함 — pip install 시 .ttf+OFL 라이선스 동반(한글 드롭아웃 방지)
 [tool.setuptools.package-data]
-harness_app = ["qt_shell/fonts/*.ttf"]
+harness_app = ["qt_shell/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

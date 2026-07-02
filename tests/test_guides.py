@@ -49,3 +49,10 @@ def test_involvement_colors_single_source():
     assert involvement_meta["auto"]["color"] == "#1a7f37"
     assert involvement_meta["assisted"]["color"] == "#0969da"
     assert involvement_meta["manual-gate"]["color"] == "#bc4c00"
+
+
+def test_layer_flow_caption_matches_layer_count():
+    # PM6 흐름 캡션은 6개 영역과 1:1 — 단계 수가 어긋나면(페르소나 공통 지적) 실패해야 한다.
+    from harness_app.guides import LAYER_FLOW_CAPTION
+
+    assert len(LAYER_FLOW_CAPTION.split("→")) == len(layer_order)

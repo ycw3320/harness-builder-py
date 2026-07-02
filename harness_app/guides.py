@@ -242,8 +242,9 @@ HARNESS_DEFINITION = (
     "위험한 방향(.env·강제 push)으로는 못 가게 잡아줍니다."
 )
 HARNESS_AHA = "방금 본 게 하네스예요"
-# 6계층 멘탈모델 — '왜 이 순서인가'를 한 줄로(과소일반화 '하네스=차단' 보완)
-LAYER_FLOW_CAPTION = "아는가 → 해도 되나 → 절대 못함 → 어떻게 → 검증"
+# 6영역 멘탈모델 — '왜 이 순서인가'를 한 줄로(과소일반화 '하네스=차단' 보완).
+# layer_order 6개와 1:1 대응(테스트로 정합 강제): context→permissions→mcp→guardrails→workflow→verification
+LAYER_FLOW_CAPTION = "아는가 → 해도 되나 → 무엇과 연결되나 → 절대 못함 → 어떻게 → 검증"
 
 
 def guidance_for(c: HarnessComponent) -> FieldGuidance | None:
