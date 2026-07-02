@@ -117,6 +117,64 @@ def show_export_done(parent, dest: str, report, n_unedited_examples: int) -> Non
     dlg.exec()
 
 
+def show_receive_review(parent, ir, findings: list[dict], compare) -> bool:
+    """PM7-S2 수신 검증 — 받은/연 .harness.json 이 '무엇을 하는지'를 가져오기 전에 보여준다.
+
+    해자의 두 번째 사용처: '만들 때 검증'에 이어 '받을 때 검증'(LLM 0회·오프라인).
+    반환 True=가져오기 확정. findings=lint_ir 결과, compare=vm.sim_compare_ir 결과.
+    """
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("하네스 파일 확인 — 가져오기 전 검증")
+    dlg.setMinimumWidth(560)
+    v = QVBoxLayout(dlg)
+    v.setSpacing(10)
+    title = QLabel(f"이 하네스가 하는 일 — {ir.meta.project_name}")
+    title.setObjectName("h1")
+    v.addWidget(title)
+    summary = QLabel(f"구성요소 {len(ir.components)}개 · 프리셋 기원: {ir.meta.preset}")
+    summary.setObjectName("muted")
+    v.addWidget(summary)
+
+    # 실행 전 시뮬 — 받은 규칙이 실제로 무엇을 막는지
+    for s in compare:
+        line = QLabel(f"•  {s.label} → {s.after_outcome}")
+        line.setObjectName("muted" if s.after_raw == "allowed" else "lintWarn")
+        line.setWordWrap(True)
+        v.addWidget(line)
+
+    # lint 결과(상위 5)
+    errors = [f for f in findings if f["level"] == "error"]
+    warns = [f for f in findings if f["level"] != "error"]
+    if not findings:
+        ok = QLabel("정합성 검사: 문제 없음")
+        ok.setObjectName("muted")
+        v.addWidget(ok)
+    for f in (errors + warns)[:5]:
+        lbl = QLabel(f"[{f['code']}] {f['message']}")
+        lbl.setObjectName("lintErr" if f["level"] == "error" else "lintWarn")
+        lbl.setWordWrap(True)
+        v.addWidget(lbl)
+
+    caution = QLabel(
+        "외부에서 받은 파일이라면: 가져온 뒤 가드레일의 hook 스크립트 본문을 한 번 확인하세요 — "
+        "스크립트는 실행 코드입니다."
+    )
+    caution.setObjectName("faint")
+    caution.setWordWrap(True)
+    v.addWidget(caution)
+
+    row = QHBoxLayout()
+    row.addStretch(1)
+    cancel = make_btn("취소", "addBtn", dlg.reject)
+    accept = make_btn("가져오기(현재 작업 대체)", "primaryBtn", dlg.accept)
+    row.addWidget(cancel)
+    row.addWidget(accept)
+    rw = QWidget()
+    rw.setLayout(row)
+    v.addWidget(rw)
+    return dlg.exec() == QDialog.DialogCode.Accepted
+
+
 def open_llm_settings(parent, settings) -> None:
     """LLM 설정(BYO 키) 다이얼로그 — 모델 선택 + API 키 저장/삭제(OS 자격증명관리자)."""
     dlg = QDialog(parent)

@@ -35,7 +35,9 @@ from PySide6.QtWidgets import (
 
 from harness_core.export.assemble_project import assemble_project
 from harness_core.ir.enforcement import promote
+from harness_core.ir.migrate import dump_ir, load_ir_any
 from harness_core.ir.registry import addable_kinds_by_layer, kind_registry
+from harness_core.lint.lint import lint_ir
 from harness_fs.importer import import_project
 from harness_fs.policy import MergeStrategy
 from harness_fs.writer import write_tree
@@ -45,7 +47,7 @@ from harness_llm.client import DEFAULT_MODEL, AnthropicClient, LLMError, anthrop
 from .. import view_model as vm
 from ..guides import HARNESS_AHA, HARNESS_DEFINITION, LAYER_FLOW_CAPTION, layer_order
 from ..state import BuilderState
-from .dialogs import open_llm_settings, show_export_done, show_welcome
+from .dialogs import open_llm_settings, show_export_done, show_receive_review, show_welcome
 
 # 하위호환 re-export — 기존 import 경로(tests 포함) 보존. R#8 분해로 실제 정의는 각 모듈.
 from .landing import LandingPage
@@ -495,6 +497,28 @@ class BuilderWindow(QMainWindow):
             v.addWidget(f)
 
         v.addStretch(1)
+        # PM7-S2: 통합 .harness.json — 작업 저장(앱 끄면 소실 해소)=공유(팀 표준 전달) 단일 포맷
+        filerow = QHBoxLayout()
+        filerow.addWidget(
+            make_btn(
+                "파일로 저장",
+                "addBtn",
+                self._on_save_file,
+                tip="현재 작업 전체를 .harness.json 하나로 저장 — 그대로 공유할 수 있어요",
+            )
+        )
+        filerow.addWidget(
+            make_btn(
+                "파일 열기",
+                "addBtn",
+                self._on_open_file,
+                tip="받은/저장한 .harness.json 을 '무엇을 하는지' 확인 후 가져오기",
+            )
+        )
+        filerow.addStretch(1)
+        frw = QWidget()
+        frw.setLayout(filerow)
+        v.addWidget(frw)
         imp = make_btn("기존 폴더 가져오기", "addBtn", self._on_import)
         v.addWidget(imp)
         combo = QComboBox()
@@ -654,6 +678,37 @@ class BuilderWindow(QMainWindow):
         # 미편집 '예시' 수는 윈도 상태(_example_ids)로만 계산 가능 — 여기서 세어 인자로 전달(R#8).
         n_ex = sum(1 for c in self.state.ir.components if c.enabled and c.id in self._example_ids)
         show_export_done(self, dest, report, n_ex)
+
+    # PM7-S2: 통합 .harness.json 저장/열기 ---
+    def _on_save_file(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "하네스 파일로 저장",
+            f"{self.state.ir.meta.project_name}.harness.json",
+            "하네스 파일 (*.harness.json)",
+        )
+        if not path:
+            return
+        Path(path).write_text(dump_ir(self.state.ir), encoding="utf-8", newline="\n")
+        QMessageBox.information(
+            self, "저장 완료", f"{path}\n이 파일 하나로 작업 이어가기·팀 공유가 가능합니다."
+        )
+
+    def _on_open_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "하네스 파일 열기", "", "하네스 파일 (*.harness.json);;JSON (*.json)"
+        )
+        if not path:
+            return
+        try:
+            ir = load_ir_any(Path(path).read_text(encoding="utf-8"))
+        except Exception as e:
+            QMessageBox.warning(self, "열기 실패", str(e))
+            return
+        # 수신 검증(해자의 두 번째 사용처): 가져오기 전에 '무엇을 하는지' 결정론으로 보여줌
+        if show_receive_review(self, ir, lint_ir(ir), vm.sim_compare_ir(ir)):
+            self._example_ids = set()  # 파일에서 온 구성은 예시 아님 — load_ir 통지 이전 클리어
+            self.state.load_ir(ir)
 
     def _on_import(self) -> None:
         src = QFileDialog.getExistingDirectory(self, "기존 프로젝트 루트(.claude 포함) 선택")
