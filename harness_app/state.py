@@ -46,6 +46,11 @@ class BuilderState:
         self.scaffold: Scaffold = "minimal"
         self._listeners: list[Callable[[], None]] = []
 
+    @property
+    def preset(self) -> PresetName:
+        """현재 프리셋(읽기 전용) — UI 가 사적 속성(_preset)을 직접 읽던 경계 위반 해소."""
+        return self._preset
+
     # 구독 (프레임워크 어댑터 경계) ---
     def subscribe(self, listener: Callable[[], None]) -> Callable[[], None]:
         """리스너 등록 → 해제 함수 반환."""
