@@ -21,7 +21,9 @@ def qapp():
 
     지연 import: 이 픽스처를 쓰는 테스트에서만 PySide6 를 로드한다(순수 테스트 무영향).
     """
+    # setdefault: CI 가 다른 플랫폼 플러그인을 강제할 수 있게 기존 값 존중
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ.pop("HB_THEME", None)  # 개발 머신 테마 env 가 테스트를 오염시키지 않게 스크럽
     from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication([])

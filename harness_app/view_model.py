@@ -96,12 +96,17 @@ class SimCompareVM:
 
 @dataclass(frozen=True)
 class SimRuleVM:
-    """시뮬레이터 결과를 바꾸는 '켜진 규칙' — 토글로 끄면 차단이 풀림(인과 체감)."""
+    """규칙 on/off 토글 — affects_sim=True 면 끄면 차단이 풀림(인과 체감).
+
+    False(allow 권한·비차단 hook)여도 목록엔 남는다 — enabled 는 export 포함 여부를
+    좌우하는 실기능이라 토글 수단을 없애면 안 됨(대신 '시뮬 영향 없음' 배지).
+    """
 
     id: str
     title: str
     kind: str
     enabled: bool
+    affects_sim: bool
 
 
 @dataclass(frozen=True)
@@ -146,17 +151,27 @@ _OUTCOME_LABEL = {
 
 def _safe_simulate(ir, scenario: dict) -> dict:
     """simulate 를 re.error 로부터 보호 — hook '대상 도구'는 자유 입력 regex 라
-    미완성 괄호('Bash(') 하나로 우패널 재빌드가 통째로 무너지던 결함 방어(코어 무수정)."""
+    미완성 괄호('Bash(') 하나로 우패널 재빌드가 통째로 무너지던 결함 방어(코어 무수정).
+
+    오류를 낸 hook 을 특정해 blockedBy 에 실어 — 붉은 줄 클릭→해당 규칙 점프(수정 유도)가 되게 한다.
+    """
     try:
         return simulate(ir, scenario)
     except re.error:
-        return {
-            "action": scenario,
-            "outcome": "invalid",
-            "reasons": [
-                "hook '대상 도구' 패턴이 올바르지 않아 평가할 수 없어요 — 해당 규칙을 수정하세요"
-            ],
-        }
+        bad_id, bad_title = None, ""
+        for c in ir.components:
+            if c.kind == "hook" and c.enabled:
+                try:
+                    re.compile(c.matcher_tool)
+                except re.error:
+                    bad_id, bad_title = c.id, c.title
+                    break
+        reason = (
+            f'hook "{bad_title}" 의 대상 도구 패턴이 올바르지 않아 평가할 수 없어요 — 클릭해 수정하세요'
+            if bad_id
+            else "hook '대상 도구' 패턴이 올바르지 않아 평가할 수 없어요 — 해당 규칙을 수정하세요"
+        )
+        return {"action": scenario, "outcome": "invalid", "reasons": [reason], "blockedBy": bad_id}
 
 
 # kind별 편집 필드 스펙 (스키마 필드와 1:1). id/layer/involvement/enabled/title 은 공통 처리.
@@ -399,11 +414,17 @@ def _rule_affects_sim(c) -> bool:
 
 
 def sim_rules(state: BuilderState) -> list[SimRuleVM]:
-    """시뮬레이터 결과를 바꾸는 규칙 목록 — '꺼보세요' 토글용."""
+    """규칙 on/off 토글 목록(hook·permission 전체) — affects_sim 으로 시연 가능 여부 구분."""
     return [
-        SimRuleVM(id=c.id, title=c.title, kind=c.kind, enabled=c.enabled)
+        SimRuleVM(
+            id=c.id,
+            title=c.title,
+            kind=c.kind,
+            enabled=c.enabled,
+            affects_sim=_rule_affects_sim(c),
+        )
         for c in state.ir.components
-        if _rule_affects_sim(c)
+        if c.kind in ("hook", "permission-rule")
     ]
 
 
