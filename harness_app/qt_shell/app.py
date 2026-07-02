@@ -416,9 +416,12 @@ class BuilderWindow(QMainWindow):
         head_w.setLayout(head)
         v.addWidget(head_w)
 
-        # 완성도 미터 + 다음 추천 영역 (§0.6 안내형 누적 흐름)
+        # 성숙도(질) + 완성도 미터(양) + 다음 추천 영역 (§0.6 → PM7-S4 질적 진화)
         comp = vm.completion(self.state)
-        v.addWidget(self._section(f"완성도 · 구성된 영역 {comp.filled}/{comp.total}"))
+        mat = vm.maturity(self.state)
+        sect = self._section(f"성숙도 {mat.label} · 구성 {comp.filled}/{comp.total}")
+        sect.setToolTip(mat.detail)  # 산식 공개 — 게임화 역효과 통제
+        v.addWidget(sect)
         meter = QProgressBar()
         meter.setObjectName("meter")
         meter.setRange(0, 100)
@@ -426,6 +429,12 @@ class BuilderWindow(QMainWindow):
         meter.setTextVisible(False)
         meter.setFixedHeight(8)
         v.addWidget(meter)
+        if mat.next_hint:
+            mh = QLabel(f"다음 레벨: {mat.next_hint}")
+            mh.setObjectName("faint")
+            mh.setWordWrap(True)
+            mh.setToolTip(mat.detail)
+            v.addWidget(mh)
         if comp.next_layer:
             nxt = make_btn(
                 f"다음 추천 영역: {comp.next_label} →",
@@ -677,7 +686,7 @@ class BuilderWindow(QMainWindow):
     def _show_export_done(self, dest: str, report) -> None:
         # 미편집 '예시' 수는 윈도 상태(_example_ids)로만 계산 가능 — 여기서 세어 인자로 전달(R#8).
         n_ex = sum(1 for c in self.state.ir.components if c.enabled and c.id in self._example_ids)
-        show_export_done(self, dest, report, n_ex)
+        show_export_done(self, dest, report, n_ex, maturity_label=vm.maturity(self.state).label)
 
     # PM7-S2: 통합 .harness.json 저장/열기 ---
     def _on_save_file(self) -> None:
