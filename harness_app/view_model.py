@@ -118,6 +118,20 @@ class CompletionVM:
     next_label: str | None
 
 
+@dataclass(frozen=True)
+class MaturityVM:
+    """PM7-S4 성숙도 — '몇 칸 채웠나'(양)가 아니라 '얼마나 지켜지나'(질)를 결정론 산식으로.
+
+    Lv0 무방비 → Lv1 약속(prose만) → Lv2 규칙(권한·정책) → Lv3 강제(차단 hook)
+    → Lv4 검증됨(오류 0·보안경고 0·차단 시연·핵심 시나리오 커버). 산식은 detail 로 공개.
+    """
+
+    level: int  # 0~4
+    label: str  # 예: "Lv3 강제"
+    detail: str  # 산식 공개(툴팁)
+    next_hint: str | None  # 다음 레벨로 가는 최소 행동(없으면 최고 레벨)
+
+
 # 완성도 집계 대상(편집 가능 계층). verification 은 내보내기 전용이라 제외.
 _COUNTABLE = ["context", "permissions", "mcp", "guardrails", "workflow"]
 
@@ -347,6 +361,59 @@ def layer_intro(state: BuilderState) -> dict[str, str]:
         "minimum": intro.minimum_to_do,
         "if_unsure": intro.if_unsure,
     }
+
+
+_MATURITY_NAMES = {0: "무방비", 1: "약속", 2: "규칙", 3: "강제", 4: "검증됨"}
+_MATURITY_DETAIL = (
+    "산식(결정론): Lv1=지침 존재 · Lv2=권한/정책 규칙 존재 · Lv3=차단 hook(도구 실행 전+금지) 존재 · "
+    "Lv4=오류 0 + 보안 경고 0 + 차단 시연 ≥1 + 핵심 시나리오(.env 차단·강제 push 확인) 커버"
+)
+
+
+def maturity(state: BuilderState) -> MaturityVM:
+    """§PM7-S4 성숙도 판정 — lint+simulate 결과의 함수(해자가 심판, LLM 0회)."""
+    enabled = [c for c in state.ir.components if c.enabled]
+    has_rule = any(c.kind in ("permission-rule", "policy-doc") for c in enabled)
+    has_block_hook = any(
+        c.kind == "hook" and c.event == "PreToolUse" and c.action == "deny" for c in enabled
+    )
+
+    if not enabled:
+        level, hint = 0, "컨텍스트 영역에서 프로젝트 개요 한 줄부터 시작하세요"
+    elif not has_rule and not has_block_hook:
+        level, hint = 1, "도구·권한 영역에서 위험 명령 금지 규칙 1개를 추가하세요"
+    elif not has_block_hook:
+        level, hint = 2, "가드레일 영역에서 차단 hook(도구 실행 전+금지) 1개를 추가하세요"
+    else:
+        findings = lint_ir(state.ir, rulesets=("core", "security"))
+        errors = [f for f in findings if f["level"] == "error"]
+        sec_warns = [f for f in findings if f["code"].startswith("sec-")]
+        compare = sim_compare_ir(state.ir)
+        by_label = {r.label: r for r in compare}
+        env = by_label.get(".env 파일에 쓰기 시도")
+        push = by_label.get("강제 push 시도")
+        covered = (
+            env is not None
+            and env.after_raw.startswith("blocked")
+            and push is not None
+            and push.after_raw in ("ask", "blocked-by-hook", "blocked-by-permission")
+        )
+        changed = any(r.changed for r in compare)
+        if not errors and not sec_warns and changed and covered:
+            level, hint = 4, None
+        else:
+            level = 3
+            if errors or sec_warns:
+                hint = "정합성 오류·보안 경고를 해결하세요(우측 검사 결과 참조)"
+            else:
+                hint = ".env 쓰기 차단과 강제 push 확인 규칙을 켜세요(핵심 시나리오 커버)"
+
+    return MaturityVM(
+        level=level,
+        label=f"Lv{level} {_MATURITY_NAMES[level]}",
+        detail=_MATURITY_DETAIL,
+        next_hint=hint,
+    )
 
 
 def lint_items(state: BuilderState) -> list[LintVM]:

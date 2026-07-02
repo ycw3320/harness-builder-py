@@ -61,7 +61,9 @@ def show_welcome(parent) -> None:
     dlg.exec()
 
 
-def show_export_done(parent, dest: str, report, n_unedited_examples: int) -> None:
+def show_export_done(
+    parent, dest: str, report, n_unedited_examples: int, maturity_label: str = ""
+) -> None:
     """PM6-S6: 생성 후 '다음 단계' — 결과물을 손에 쥐고도 작동을 못 보던 갭을 닫는다."""
     dlg = QDialog(parent)
     dlg.setWindowTitle("하네스 생성 완료 — 다음 단계")
@@ -71,7 +73,10 @@ def show_export_done(parent, dest: str, report, n_unedited_examples: int) -> Non
     title = QLabel("하네스를 만들었어요. 이제 이렇게 쓰세요")
     title.setObjectName("h1")
     v.addWidget(title)
-    summary = QLabel(f"생성 {len(report.created)}개 · 건너뜀 {len(report.skipped)}개\n{dest}")
+    badge = f" · 성숙도 {maturity_label}" if maturity_label else ""
+    summary = QLabel(
+        f"생성 {len(report.created)}개 · 건너뜀 {len(report.skipped)}개{badge}\n{dest}"
+    )
     summary.setObjectName("muted")
     summary.setWordWrap(True)
     v.addWidget(summary)
