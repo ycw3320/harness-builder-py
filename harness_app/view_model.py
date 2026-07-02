@@ -350,8 +350,10 @@ def layer_intro(state: BuilderState) -> dict[str, str]:
 
 
 def lint_items(state: BuilderState) -> list[LintVM]:
+    # PM7-S3: 앱 표시는 core+security — 실행 전 보안 검증(전부 warning, export 미차단)
     return [
-        LintVM(level=f["level"], code=f["code"], message=f["message"]) for f in lint_ir(state.ir)
+        LintVM(level=f["level"], code=f["code"], message=f["message"])
+        for f in lint_ir(state.ir, rulesets=("core", "security"))
     ]
 
 

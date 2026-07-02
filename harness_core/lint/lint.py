@@ -1,4 +1,8 @@
-"""정합성 검사 — error=Export 차단, warning=경고."""
+"""정합성 검사 — error=Export 차단, warning=경고.
+
+PM7-S3: rulesets opt-in — 기본 ("core",) 호출은 기존과 바이트 동일(frozen 골든 보호),
+("core","security") 로 실행 전 보안 검증(전부 warning — export 차단 없음)을 추가한다.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,22 @@ import re
 from ..ir.schema import HarnessIR, by_kind
 
 _PLACEHOLDER = re.compile(r"^\$\{[A-Z0-9_]+\}$")
+
+# 보안 룰셋 데이터 — 결정론 정규식(LLM 0회). 문구는 2단 톤(쉬운 말 + 부가).
+_DANGEROUS_ALLOW_FRAGMENTS = ("rm -rf", "push --force", "sudo ", "del /", "format ")
+_INJECTION_PATTERNS = [
+    (re.compile(r"curl[^\n]*\|\s*(ba)?sh"), "curl 결과를 곧바로 셸로 실행"),
+    (re.compile(r"wget[^\n]*\|\s*(ba)?sh"), "wget 결과를 곧바로 셸로 실행"),
+    (re.compile(r"eval\s+[\"']?\$"), "변수 내용을 eval 로 실행"),
+    (re.compile(r"base64\s+(-d|--decode)"), "base64 로 숨긴 내용을 해독"),
+]
+_SECRET_PATTERNS = [
+    re.compile(r"sk-ant-[A-Za-z0-9_-]{8,}"),
+    re.compile(r"ghp_[A-Za-z0-9]{20,}"),
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"xox[bap]-[A-Za-z0-9-]{10,}"),
+]
+_MCP_OVERLOAD_THRESHOLD = 5
 
 
 def parse_pattern(pattern: str) -> dict:
@@ -18,9 +38,90 @@ def parse_pattern(pattern: str) -> dict:
     return {"tool": tool, "prefix": prefix}
 
 
-def lint_ir(ir: HarnessIR) -> list[dict]:
+def _text_fields(c) -> list[str]:
+    """kind별 시크릿 스캔 대상 자유 텍스트 필드."""
+    if c.kind == "prose-guideline":
+        return [c.heading, c.body]
+    if c.kind == "policy-doc":
+        return [c.body]
+    if c.kind == "sub-agent":
+        return [c.description, c.system_prompt]
+    if c.kind == "hook":
+        return [c.script_body]
+    return []
+
+
+def _security_findings(enabled: list) -> list[dict]:
+    """실행 전 보안 검증(ECC 반영 잔여 — 해자 강화). 전부 warning: export 를 막지 않는다."""
+    findings: list[dict] = []
+    perms = by_kind(enabled, "permission-rule")
+
+    for p in [x for x in perms if x.action == "allow"]:
+        pp = parse_pattern(p.pattern)
+        if pp["prefix"] == "":
+            findings.append(
+                {
+                    "level": "warning",
+                    "code": "sec-broad-allow",
+                    "message": f'권한 "{p.pattern}" 는 {pp["tool"]} 전체를 허용해요 — 위험한 하위 명령까지 자유 실행됩니다. 범위를 좁히세요(예: {pp["tool"]}(명령:*))',
+                    "componentId": p.id,
+                }
+            )
+        elif any(frag in pp["prefix"] for frag in _DANGEROUS_ALLOW_FRAGMENTS):
+            findings.append(
+                {
+                    "level": "warning",
+                    "code": "sec-dangerous-allow",
+                    "message": f"위험한 명령이 허용(allow)돼 있어요: {p.pattern} — 질문(ask)이나 금지(deny)를 권장합니다",
+                    "componentId": p.id,
+                }
+            )
+
+    for h in by_kind(enabled, "hook"):
+        for pat, what in _INJECTION_PATTERNS:
+            if pat.search(h.script_body):
+                findings.append(
+                    {
+                        "level": "warning",
+                        "code": "sec-hook-injection",
+                        "message": f'hook "{h.title}" 스크립트에 의심 패턴({what})이 있어요 — 외부에서 받은 하네스라면 본문을 꼭 확인하세요(스크립트는 실행 코드)',
+                        "componentId": h.id,
+                    }
+                )
+                break  # hook 당 1건
+
+    for c in enabled:
+        for text in _text_fields(c):
+            if any(p.search(text) for p in _SECRET_PATTERNS):
+                findings.append(
+                    {
+                        "level": "warning",
+                        "code": "sec-secret-literal",
+                        "message": f'"{c.title}" 에 실제 비밀키로 보이는 문자열이 있어요 — 파일에 그대로 저장·공유됩니다. ${{VAR}} 플레이스홀더로 바꾸세요',
+                        "componentId": c.id,
+                    }
+                )
+                break
+
+    mcps = by_kind(enabled, "mcp-server")
+    if len(mcps) > _MCP_OVERLOAD_THRESHOLD:
+        findings.append(
+            {
+                "level": "warning",
+                "code": "sec-mcp-overload",
+                "message": f"외부 도구(MCP)가 {len(mcps)}개예요 — 필요한 것만 연결하세요(토큰 비용·공격면 증가)",
+            }
+        )
+    return findings
+
+
+def lint_ir(ir: HarnessIR, rulesets: tuple[str, ...] = ("core",)) -> list[dict]:
     findings: list[dict] = []
     enabled = [c for c in ir.components if c.enabled]
+    if "security" in rulesets:
+        findings.extend(_security_findings(enabled))
+    if "core" not in rulesets:
+        return findings
 
     # 1. 중복 id
     seen: set[str] = set()
