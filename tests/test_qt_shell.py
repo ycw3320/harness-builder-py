@@ -205,3 +205,26 @@ def test_save_and_open_harness_file(qapp, temp_settings, tmp_path, monkeypatch):
     qapp.processEvents()
     assert win2._example_ids == set()
     assert any(c.kind == "hook" for c in win2.state.ir.components)  # safety-first 내용으로 대체됨
+
+
+def test_quickstart_dialog_preview_and_apply(qapp, temp_settings, tmp_path):
+    """PM8: 다이얼로그 미리보기(Lv4)·확정 → 윈도 적용(빌더 진입·예시 아님·즉시 생성)."""
+    from harness_app.qt_shell.app import LIGHT
+    from harness_app.qt_shell.quickstart_dialog import QuickStartDialog
+
+    win = _make_window(qapp, temp_settings)
+    dlg = QuickStartDialog(win, LIGHT, "demo")
+    assert "Lv4" in dlg._preview.text()  # 기본값 = 검증됨 미리보기
+    dlg._set_persona("fast")
+    assert "Lv4" in dlg._preview.text()  # 성향 바꿔도 보호 기본값이면 유지
+    dlg._confirm()
+    assert dlg.result_ir is not None
+
+    dest = tmp_path / "proj"
+    dest.mkdir()
+    win._show_export_done = lambda *a, **k: None  # 다이얼로그 모킹
+    win._apply_quickstart(dlg.result_ir, str(dest))
+    qapp.processEvents()
+    assert win._stack.currentIndex() == 1  # 빌더 진입
+    assert win._example_ids == set()  # 답해서 만든 구성 — 예시 아님
+    assert (dest / "demo" / ".claude" / "settings.json").exists()  # 즉시 생성 완결

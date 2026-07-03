@@ -114,9 +114,9 @@ class BuilderWindow(QMainWindow):
         splitter.setSizes([240, 560, 380])
         splitter.setCollapsible(0, False)
 
-        # 랜딩(소개) → [시작하기] → 빌더(3-pane). QStackedWidget 로 전환.
+        # 랜딩(소개) → [30초 빠른 시작]/[직접 조립] → 빌더(3-pane). QStackedWidget 로 전환.
         self._stack = QStackedWidget()
-        self._stack.addWidget(LandingPage(self._enter_builder))  # index 0: 소개
+        self._stack.addWidget(LandingPage(self._enter_builder, self._open_quickstart))  # index 0
         self._stack.addWidget(splitter)  # index 1: 빌더
         self.setCentralWidget(self._stack)
         # 재방문자는 빌더로 직행(랜딩은 '소개' 버튼으로 상시 재방문 가능).
@@ -133,6 +133,25 @@ class BuilderWindow(QMainWindow):
     def _enter_builder(self) -> None:
         self._settings.setValue("landing_seen", True)
         self._stack.setCurrentIndex(1)
+
+    # PM8 실험: 30초 빠른 시작 — 질문 3개 → 검증된 IR → (선택) 즉시 폴더 생성 ---
+    def _open_quickstart(self) -> None:
+        from .quickstart_dialog import QuickStartDialog  # 지연 import(시작 비용 절감)
+
+        dlg = QuickStartDialog(self, self.tokens, self.state.ir.meta.project_name)
+        # exec() 반환: Accepted=1 / Rejected=0 — truthiness 로 판정(QDialog 재import 회피)
+        if dlg.exec() and dlg.result_ir is not None:
+            self._apply_quickstart(dlg.result_ir, dlg.result_dest)
+
+    def _apply_quickstart(self, ir, dest: str | None) -> None:
+        """빠른 시작 결과 적용 — 사용자가 답해 만든 구성이므로 '예시' 아님."""
+        self._example_ids = set()
+        self.state.load_ir(ir)
+        self._enter_builder()
+        if dest:  # 폴더를 골랐다면 바로 생성까지(최소 입력의 완결)
+            tree = assemble_project(self.state.ir, self.state.scaffold)
+            report = write_tree(tree, Path(dest), strategy=MergeStrategy.SKIP_EXISTING)
+            self._show_export_done(dest, report)
 
     def _show_landing(self) -> None:
         self._stack.setCurrentIndex(0)

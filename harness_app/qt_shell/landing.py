@@ -22,8 +22,9 @@ class LandingPage(QWidget):
     정의·가치를 본다. 스타일은 전부 QSS objectName(인라인 색 금지)이라 테마 토글이 자동 반영된다.
     """
 
-    def __init__(self, on_start) -> None:
+    def __init__(self, on_start, on_quick=None) -> None:
         super().__init__()
+        self._on_quick = on_quick  # PM8: '30초 빠른 시작' 콜백(None 이면 버튼 숨김)
         self.setObjectName("landing")
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -97,8 +98,20 @@ class LandingPage(QWidget):
         col.addSpacing(18)
 
         btnrow = QHBoxLayout()
-        start = make_btn("시작하기  →", "startBtn", on_start)
-        btnrow.addWidget(start)
+        # PM8: 초심자 1순위 경로 = 최소 입력(질문 3개). 직접 조립은 보조 경로로 병행.
+        if on_quick is not None:
+            quick = make_btn(
+                "30초 빠른 시작  →",
+                "startBtn",
+                on_quick,
+                tip="질문 3개(폴더·성향·보호)만 답하면 검증된 하네스가 완성됩니다",
+            )
+            btnrow.addWidget(quick)
+            start = make_btn("직접 조립하며 둘러보기", "addBtn", on_start)
+            btnrow.addWidget(start)
+        else:
+            start = make_btn("시작하기  →", "startBtn", on_start)
+            btnrow.addWidget(start)
         btnrow.addStretch(1)
         brw = QWidget()
         brw.setLayout(btnrow)
