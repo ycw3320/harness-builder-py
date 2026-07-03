@@ -20,13 +20,26 @@ PERSONAS: list[tuple[str, str, str]] = [
     ("fast", "빠르게 — 자주 쓰는 명령은 자유 허용", "speed"),
 ]
 
-# 핵심 보호(체크, 기본 전부 켬) — key → (라벨, 한 줄 설명)
-PROTECTIONS: list[tuple[str, str]] = [
-    ("env_guard", ".env 비밀키 보호 — 쓰기 시도를 자동 차단(hook)"),
-    ("rm_guard", "폴더 통삭제 금지 — rm -rf 를 금지(deny)"),
-    ("push_guard", "강제 push 는 물어보기 — 매번 확인(ask)"),
+# 핵심 보호(체크, 기본 전부 켬) — key → (쉬운 라벨, 개발자용 풀이=? 칩).
+# 라벨은 위험 시나리오 중심 쉬운 말 — '체크=이 규칙이 하네스에 들어감'은 다이얼로그 캡션이 설명.
+PROTECTIONS: list[tuple[str, str, str]] = [
+    (
+        "env_guard",
+        "비밀키 파일(.env) 지키기 — AI가 건드리면 자동 차단",
+        "hook(도구 실행 전 검사)이 .claude/hooks/ 스크립트로 생성됩니다 — .env 쓰기 시도를 exit 2 로 차단",
+    ),
+    (
+        "rm_guard",
+        "폴더 통째 삭제 막기 — 되돌릴 수 없는 삭제 금지",
+        "권한 규칙 deny: Bash(rm -rf:*) — settings.json permissions 에 들어갑니다",
+    ),
+    (
+        "push_guard",
+        "강제 push 전에 물어보기 — 실수로 원격 덮어쓰기 방지",
+        "권한 규칙 ask: Bash(git push --force:*) — 실행 전 매번 사용자 확인",
+    ),
 ]
-DEFAULT_PROTECTIONS = frozenset(k for k, _ in PROTECTIONS)
+DEFAULT_PROTECTIONS = frozenset(k for k, *_ in PROTECTIONS)
 
 
 def _is_env_hook(c: HarnessComponent) -> bool:
