@@ -122,6 +122,12 @@ QPushButton#addBtn:hover { border: 1px solid $accent; color: $accent; }
 QFrame#guideBox { background: $surface_alt; border: 1px solid $border; border-radius: 8px; }
 QFrame#ahaCard { background: $selected_bg; border: 1px solid $accent; border-radius: 10px; }
 
+QLabel#helpChip {
+    background: $surface_alt; color: $text_muted; border: 1px solid $border;
+    border-radius: 8px; padding: 0px 6px; font-size: 10px; font-weight: 700;
+}
+QLabel#helpChip:hover { border: 1px solid $accent; color: $accent; }
+
 QWidget#landing { background: $bg; }
 QLabel#heroTitle { font-size: 30px; font-weight: 700; color: $text; }
 QLabel#tagline { font-size: 15px; color: $text_muted; }
