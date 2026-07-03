@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -35,6 +36,18 @@ _TITLE_FIELD = {  # AI 생성 후 제목으로 쓸 대표 필드
     "policy-doc": "doc_name",
     "sub-agent": "name",
 }
+
+
+def help_chip(tip: str) -> QLabel:
+    """'?' 도움말 칩 — 올리면 풀이 툴팁, 클릭하면 즉시 풀이 표시.
+
+    기존 텍스트 '(?)' 접미는 '값이 미정'처럼 읽혀 오해를 낳았음(사용자 피드백) —
+    칩 모양+클릭 지원으로 '도움말' 어포던스를 명확히 한다.
+    """
+    chip = ClickableLabel("?", lambda: QToolTip.showText(QCursor.pos(), tip))
+    chip.setObjectName("helpChip")
+    chip.setToolTip(tip)
+    return chip
 
 
 def make_btn(label: str, object_name: str, on_click, tip: str = "") -> QPushButton:
@@ -392,17 +405,26 @@ class RowWidget(QFrame):
         return editor
 
     def _labeled(self, label: str, widget: QWidget, tip: str = "") -> QWidget:
-        # PM6-S5: 2단 풀이 — 라벨은 쉬운 말, dev 설명은 호버 툴팁('(?)' 로 호버 가능 신호).
+        # PM6-S5: 2단 풀이 — 라벨은 쉬운 말, dev 설명은 '?' 칩(올리면/클릭하면 풀이).
         box = QWidget()
         v = QVBoxLayout(box)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(2)
-        lab = QLabel(f"{label}  (?)" if tip else label)
+        lab = QLabel(label)
         lab.setObjectName("faint")
         if tip:
-            lab.setToolTip(tip)
-            widget.setToolTip(tip)
-        v.addWidget(lab)
+            head = QHBoxLayout()
+            head.setContentsMargins(0, 0, 0, 0)
+            head.setSpacing(5)
+            head.addWidget(lab)
+            head.addWidget(help_chip(tip))
+            head.addStretch(1)
+            hw = QWidget()
+            hw.setLayout(head)
+            v.addWidget(hw)
+            widget.setToolTip(tip)  # 입력창 자체에 올려도 같은 풀이
+        else:
+            v.addWidget(lab)
         v.addWidget(widget)
         return box
 
