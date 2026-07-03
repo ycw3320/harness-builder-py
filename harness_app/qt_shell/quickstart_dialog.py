@@ -21,7 +21,7 @@ from .. import view_model as vm
 from ..detect import detect_project
 from ..quickstart import PERSONAS, PROTECTIONS, build_quick_ir
 from ..state import BuilderState
-from .widgets import RuleToggle, make_btn
+from .widgets import RuleToggle, help_chip, make_btn
 
 
 class QuickStartDialog(QDialog):
@@ -32,7 +32,7 @@ class QuickStartDialog(QDialog):
         self._detected = None
         self._dest: str | None = None
         self._persona = PERSONAS[0][0]
-        self._protections: set[str] = {k for k, _ in PROTECTIONS}
+        self._protections: set[str] = {k for k, *_ in PROTECTIONS}
         self.result_ir = None
         self.result_dest: str | None = None
 
@@ -74,14 +74,27 @@ class QuickStartDialog(QDialog):
             self._persona_group.addButton(b)
             v.addWidget(b)
 
-        # ③ 핵심 보호(기본 전부 켬)
-        q3 = QLabel("③ 꼭 지킬 것 — 기본값 그대로가 가장 안전해요")
+        # ③ 핵심 보호(기본 전부 켬) — '체크의 역할'을 캡션으로 명시(사용자 피드백)
+        q3 = QLabel("③ 어떤 위험을 막을까요? — 체크한 것만 하네스에 규칙으로 들어가요")
         q3.setObjectName("landingH2")
+        q3.setWordWrap(True)
         v.addWidget(q3)
-        for key, label in PROTECTIONS:
-            v.addWidget(
-                RuleToggle(label, True, tokens, lambda on, k=key: self._set_protection(k, on))
+        q3_sub = QLabel(
+            "체크를 끄면 그 보호는 빠집니다 — 아래 미리보기가 바로 바뀌는 걸 확인하세요."
+        )
+        q3_sub.setObjectName("faint")
+        q3_sub.setWordWrap(True)
+        v.addWidget(q3_sub)
+        for key, label, tip in PROTECTIONS:
+            row_w = QWidget()
+            row = QHBoxLayout(row_w)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(6)
+            row.addWidget(
+                RuleToggle(label, True, tokens, lambda on, k=key: self._set_protection(k, on)), 1
             )
+            row.addWidget(help_chip(tip))  # 전문용어(hook/deny/ask)는 칩으로 격리
+            v.addWidget(row_w)
 
         # 실시간 미리보기 — 해자(성숙도·시뮬)가 답의 결과를 즉시 증명
         self._preview = QLabel()
@@ -139,9 +152,13 @@ class QuickStartDialog(QDialog):
             for r in vm.sim_compare(st)
             if r.changed
         ]
-        summary = " · ".join(blocked) if blocked else "차단 없음(모두 통과)"
+        summary = " · ".join(blocked) if blocked else "차단 없음(모두 통과 — 보호가 꺼져 있어요)"
         self._preview.setText(f"이대로 만들면: 성숙도 {m.label} · {summary}")
         self._preview.setToolTip(m.detail)
+        # 인과 시각화: 보호를 끄면 등급이 내려가는 걸 색으로 — 체크의 역할을 즉시 증명
+        self._preview.setObjectName("muted" if m.level >= 4 else "lintWarn")
+        self._preview.style().unpolish(self._preview)
+        self._preview.style().polish(self._preview)
 
     def _confirm(self) -> None:
         self.result_ir = self._build()
