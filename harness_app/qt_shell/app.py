@@ -134,6 +134,12 @@ class BuilderWindow(QMainWindow):
         self._settings.setValue("landing_seen", True)
         self._stack.setCurrentIndex(1)
 
+    def load_external_ir(self, ir) -> None:
+        """외부에서 인식한 IR 을 빌더로 — 사용자의 실제 설정이므로 '예시' 아님(공용 진입점)."""
+        self._example_ids = set()
+        self.state.load_ir(ir)
+        self._enter_builder()
+
     # PM9 실험: 라이브 관측 — 비모달 창 1개 재사용(닫아도 인스턴스 유지) ---
     def _open_live(self) -> None:
         from .live_dialog import LiveObserveDialog  # 지연 import

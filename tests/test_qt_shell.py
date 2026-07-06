@@ -255,3 +255,55 @@ def test_live_dialog_tail_and_mapping(qapp, temp_settings, tmp_path):
     dlg._poll()
     assert dlg._timeline.count() == 3
     dlg.close()
+
+
+def test_live_dialog_uses_folder_harness_as_basis(qapp, temp_settings, tmp_path):
+    """PM9: 관측 폴더에 기존 하네스가 있으면 그걸 매칭 기준으로(앱 구성과 달라도 정확)."""
+    from harness_app.qt_shell.live_dialog import LiveObserveDialog
+    from harness_core.ir.migrate import dump_ir
+    from harness_core.ir.presets import safety_first_preset
+
+    # 앱은 '빈' minimal 인데, 폴더엔 safety-first 하네스 파일이 있는 상황
+    win = _make_window(qapp, temp_settings, preset="minimal")
+    (tmp_path / "demo.harness.json").write_text(
+        dump_ir(safety_first_preset("demo")), encoding="utf-8"
+    )
+    dlg = LiveObserveDialog(win, win.state)
+    dlg.set_root(str(tmp_path))
+    assert dlg._ir is not None and any(c.kind == "hook" for c in dlg._ir.components)
+    assert "무손실" in dlg._status.text()
+
+    log = tmp_path / ".claude" / "hb-live.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        '{"hbEvent":"PreToolUse","ts":"2026-06-29T12:00:00","payload":'
+        '{"tool_name":"Write","tool_input":{"file_path":".env"}}}\n',
+        encoding="utf-8",
+    )
+    dlg._poll()
+    texts = [dlg._timeline.item(i).text() for i in range(dlg._timeline.count())]
+    # 앱 구성(minimal=규칙 없음)이 아니라 '폴더 하네스' 기준으로 차단 매칭이 떠야 한다
+    assert any(".env 쓰기 차단" in t for t in texts)
+
+    # [빌더에서 열기] → 앱 상태가 폴더 하네스로 교체
+    dlg._open_in_builder()
+    assert any(c.kind == "hook" for c in win.state.ir.components)
+    assert win._example_ids == set()
+    dlg.close()
+
+
+def test_live_dialog_falls_back_to_claude_import(qapp, temp_settings, tmp_path):
+    from harness_app.qt_shell.live_dialog import LiveObserveDialog
+    from harness_app.state import BuilderState
+    from harness_core.export.assemble_project import assemble_project
+    from harness_fs.policy import MergeStrategy
+    from harness_fs.writer import write_tree
+
+    src = BuilderState("demo", preset="mvp")
+    write_tree(assemble_project(src.ir, "minimal"), tmp_path, strategy=MergeStrategy.SKIP_EXISTING)
+    win = _make_window(qapp, temp_settings, preset="minimal")
+    dlg = LiveObserveDialog(win, win.state)
+    dlg.set_root(str(tmp_path / "demo"))  # .harness.json 없음 → .claude 역import
+    assert dlg._ir is not None and dlg._ir.components
+    assert "역import" in dlg._status.text()
+    dlg.close()

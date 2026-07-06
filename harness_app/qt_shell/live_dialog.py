@@ -20,6 +20,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from harness_core.ir.migrate import load_ir_any
+from harness_fs.importer import import_project
+
 from ..observe import LIVE_LOG, describe_event, install_observer, parse_live_line, remove_observer
 from .widgets import make_btn
 
@@ -27,11 +30,17 @@ _MAX_ROWS = 300
 
 
 class LiveObserveDialog(QDialog):
-    """비모달 관측 창 — BuilderWindow.state 를 참조해 현재 구성 기준으로 매칭 표시."""
+    """비모달 관측 창 — 매칭 기준은 '관측 폴더의 하네스'를 우선 자동 인식.
+
+    우선순위: ① *.harness.json(무손실) ② .claude 역import(베스트에포트 — 근사 명시)
+    ③ 앱의 현재 구성(폴더에 하네스가 없을 때). 기준은 상태줄에 항상 표기.
+    """
 
     def __init__(self, parent, state) -> None:
         super().__init__(parent)
+        self._window = parent
         self._state = state
+        self._ir = None  # 매칭 기준 IR(None 이면 앱 현재 구성)
         self._root: Path | None = None
         self._pos = 0  # tail 오프셋
         self.setWindowTitle("라이브 관측 (실험) — 하네스 여정")
@@ -41,7 +50,8 @@ class LiveObserveDialog(QDialog):
 
         intro = QLabel(
             "Claude Code 가 일하는 동안 어느 규칙 카드를 지나는지 실시간으로 보여줍니다. "
-            "매칭 표시는 이 앱의 현재 구성 기준 재현이며, 실제 판정은 Claude Code 가 합니다."
+            "폴더에 이미 있는 하네스를 자동 인식해 그 기준으로 매칭합니다(기준은 아래 상태줄 표기). "
+            "실제 판정 주체는 Claude Code 입니다."
         )
         intro.setObjectName("muted")
         intro.setWordWrap(True)
@@ -70,6 +80,14 @@ class LiveObserveDialog(QDialog):
         self._off_btn.setEnabled(False)
         btns.addWidget(self._off_btn)
         btns.addWidget(make_btn("타임라인 비우기", "addBtn", self._clear))
+        self._open_btn = make_btn(
+            "이 하네스를 빌더에서 열기",
+            "addBtn",
+            self._open_in_builder,
+            tip="폴더에서 인식한 하네스를 빌더 카드로 확인·편집",
+        )
+        self._open_btn.setEnabled(False)
+        btns.addWidget(self._open_btn)
         btns.addStretch(1)
         bw = QWidget()
         bw.setLayout(btns)
@@ -96,7 +114,7 @@ class LiveObserveDialog(QDialog):
         self.set_root(dest)
 
     def set_root(self, dest: str) -> None:
-        """폴더 지정(테스트에서도 사용) — tail 리셋 후 감시 시작."""
+        """폴더 지정(테스트에서도 사용) — 폴더의 기존 하네스 자동 인식 + tail 리셋."""
         self._root = Path(dest)
         self._root_lbl.setText(str(self._root))
         self._on_btn.setEnabled(True)
@@ -104,12 +122,45 @@ class LiveObserveDialog(QDialog):
         self._pos = 0
         self._timeline.clear()
         self._timer.start()
+        self._ir, basis = self._resolve_folder_ir(self._root)
+        self._open_btn.setEnabled(self._ir is not None)
         log = self._root / LIVE_LOG
-        self._status.setText(
+        tail_note = (
             "기록 감시 중 — 이 폴더에서 Claude Code 세션을 시작하세요."
             if log.exists()
             else "아직 기록 없음 — [관측 켜기] 후 이 폴더에서 Claude Code 세션을 시작하세요."
         )
+        self._status.setText(f"{basis}\n{tail_note}")
+
+    def _resolve_folder_ir(self, root: Path):
+        """관측 폴더의 하네스 인식 — ①.harness.json(무손실) ②.claude 역import ③앱 현재 구성."""
+        for f in sorted(root.glob("*.harness.json")):
+            try:
+                ir = load_ir_any(f.read_text(encoding="utf-8-sig"))
+                n = len(ir.components)
+                return (
+                    ir,
+                    f"이 폴더의 하네스 인식: {f.name} (구성요소 {n}개, 무손실) — 이 기준으로 매칭",
+                )
+            except (ValueError, OSError):
+                continue
+        if (root / ".claude").exists() or (root / "CLAUDE.md").exists():
+            try:
+                ir = import_project(str(root))
+            except Exception:
+                ir = None
+            if ir is not None and ir.components:
+                return ir, (
+                    f"이 폴더의 하네스 인식: .claude 역import (구성요소 {len(ir.components)}개) — "
+                    "이 기준으로 매칭 (hook 경로조건 등 일부 근사)"
+                )
+        return None, "폴더에서 하네스를 찾지 못함 — 앱의 현재 구성 기준으로 매칭합니다"
+
+    def _open_in_builder(self) -> None:
+        if self._ir is None:
+            return
+        self._window.load_external_ir(self._ir)
+        self._status.setText("폴더의 하네스를 빌더에 열었습니다 — 카드에서 확인·편집하세요.")
 
     def _install(self) -> None:
         if self._root is None:
@@ -150,7 +201,8 @@ class LiveObserveDialog(QDialog):
             ev = parse_live_line(line)
             if ev is None:
                 continue
-            text, comp_id = describe_event(self._state.ir, ev)
+            basis_ir = self._ir if self._ir is not None else self._state.ir
+            text, comp_id = describe_event(basis_ir, ev)
             ts = ev.ts[11:19] if len(ev.ts) >= 19 else ""
             item = QListWidgetItem(f"{ts}  {text}")
             if comp_id:  # 규칙 카드에 걸린 이벤트 강조
