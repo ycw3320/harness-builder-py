@@ -32,6 +32,10 @@ PyInstaller.__main__.run(
         "pydantic",
         "--collect-submodules",
         "pydantic_core",
+        # 리포 루트를 모듈 탐색 경로에 명시 — cwd·편집설치(PEP 660 finder) 무관하게
+        # harness_app/harness_core 수집 보장(누락 시 windowed exe 가 부팅 즉사).
+        "--paths",
+        str(ROOT),
         "--distpath",
         str(ROOT / "dist"),
         "--workpath",
