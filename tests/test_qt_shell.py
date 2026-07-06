@@ -228,3 +228,30 @@ def test_quickstart_dialog_preview_and_apply(qapp, temp_settings, tmp_path):
     assert win._stack.currentIndex() == 1  # 빌더 진입
     assert win._example_ids == set()  # 답해서 만든 구성 — 예시 아님
     assert (dest / "demo" / ".claude" / "settings.json").exists()  # 즉시 생성 완결
+
+
+def test_live_dialog_tail_and_mapping(qapp, temp_settings, tmp_path):
+    """PM9-P1: 가짜 이벤트를 로그에 append → tail(_poll)이 타임라인에 매핑 표시."""
+    from harness_app.qt_shell.live_dialog import LiveObserveDialog
+
+    win = _make_window(qapp, temp_settings)
+    dlg = LiveObserveDialog(win, win.state)
+    dlg.set_root(str(tmp_path))
+    log = tmp_path / ".claude" / "hb-live.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        '{"hbEvent":"SessionStart","ts":"2026-06-29T12:00:00","payload":null}\n'
+        '{"hbEvent":"PreToolUse","ts":"2026-06-29T12:00:01","payload":'
+        '{"tool_name":"Write","tool_input":{"file_path":".env"}}}\n',
+        encoding="utf-8",
+    )
+    dlg._poll()
+    texts = [dlg._timeline.item(i).text() for i in range(dlg._timeline.count())]
+    assert any("컨텍스트" in t for t in texts)
+    assert any(".env 쓰기 차단" in t and "hook 차단" in t for t in texts)
+    # 증분 tail: 새 줄만 추가 반영
+    with open(log, "a", encoding="utf-8") as f:
+        f.write('{"hbEvent":"Stop","ts":"2026-06-29T12:00:02","payload":null}\n')
+    dlg._poll()
+    assert dlg._timeline.count() == 3
+    dlg.close()

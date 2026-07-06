@@ -134,6 +134,15 @@ class BuilderWindow(QMainWindow):
         self._settings.setValue("landing_seen", True)
         self._stack.setCurrentIndex(1)
 
+    # PM9 실험: 라이브 관측 — 비모달 창 1개 재사용(닫아도 인스턴스 유지) ---
+    def _open_live(self) -> None:
+        from .live_dialog import LiveObserveDialog  # 지연 import
+
+        if getattr(self, "_live_dlg", None) is None:
+            self._live_dlg = LiveObserveDialog(self, self.state)
+        self._live_dlg.show()
+        self._live_dlg.raise_()
+
     # PM8 실험: 30초 빠른 시작 — 질문 3개 → 검증된 IR → (선택) 즉시 폴더 생성 ---
     def _open_quickstart(self) -> None:
         from .quickstart_dialog import QuickStartDialog  # 지연 import(시작 비용 절감)
@@ -426,6 +435,13 @@ class BuilderWindow(QMainWindow):
         head.addStretch(1)
         intro = make_btn("소개", "addBtn", self._show_landing, tip="소개 화면 다시 보기")
         head.addWidget(intro)
+        live = make_btn(
+            "라이브 관측",
+            "addBtn",
+            self._open_live,
+            tip="Claude Code 세션이 하네스의 어느 규칙을 지나는지 실시간 확인(실험)",
+        )
+        head.addWidget(live)
         helpb = make_btn("도움말", "addBtn", self._show_welcome)
         head.addWidget(helpb)
         gear = make_btn("LLM 설정", "addBtn", self._open_settings)
