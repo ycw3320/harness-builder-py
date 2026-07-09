@@ -1,4 +1,4 @@
-# 하네스 빌더 (Python 데스크톱)
+# 버클 (Buckle) — Claude Code 하네스 빌더 (Python 데스크톱)
 
 Claude Code 하네스(`.claude/` + `CLAUDE.md`)를 GUI로 구성해 **로컬 프로젝트 폴더에 직접 생성/병합**하는 데스크톱 앱.
 

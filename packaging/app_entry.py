@@ -1,4 +1,4 @@
-"""PyInstaller 진입점 — 하네스 빌더 Qt GUI 단일 실행본."""
+"""PyInstaller 진입점 — 버클(하네스 빌더) Qt GUI 단일 실행본."""
 
 if __name__ == "__main__":
     try:

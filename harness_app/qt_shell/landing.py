@@ -45,10 +45,12 @@ class LandingPage(QWidget):
         wrap.addWidget(colw)
         wrap.addStretch(1)
 
-        hero = QLabel("하네스 빌더")
+        hero = QLabel("버클")
         hero.setObjectName("heroTitle")
         col.addWidget(hero)
-        tag = QLabel("AI 코딩 도구에게 '안전벨트'를 채우는 가장 쉬운 방법")
+        tag = QLabel(
+            "Claude Code 하네스 빌더 · AI 코딩 도구에게 '안전벨트'를 채우는 가장 쉬운 방법"
+        )
         tag.setObjectName("tagline")
         tag.setWordWrap(True)
         col.addWidget(tag)

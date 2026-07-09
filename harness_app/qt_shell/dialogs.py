@@ -31,7 +31,7 @@ from .widgets import make_btn
 def show_welcome(parent) -> None:
     """도움말 다이얼로그 — 하네스 정의 + 사용 3단계."""
     dlg = QDialog(parent)
-    dlg.setWindowTitle("하네스 빌더 — 안내")
+    dlg.setWindowTitle("버클 — 안내")
     dlg.setMinimumWidth(520)
     v = QVBoxLayout(dlg)
     v.setSpacing(10)
