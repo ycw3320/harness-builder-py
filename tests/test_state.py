@@ -105,6 +105,12 @@ def test_completion_meter():
 
     s = BuilderState("demo", preset="minimal")
     c = vm.completion(s)
-    assert (c.filled, c.total, c.next_layer) == (1, 5, "permissions")
+    # 핵심 계층 3종(context/permissions/guardrails) 중 context 만 채워짐 → 1/3, 다음은 permissions.
+    assert (c.filled, c.total, c.next_layer) == (1, 3, "permissions")
+    # 안전우선은 핵심 3계층을 모두 채우므로 선택 계층(mcp/workflow) 없이도 100% 도달 가능해야 한다
+    # (신호 정합화: '선택'으로 안내한 계층을 분모에 강제하지 않음).
     s.load_preset("safety-first")
-    assert vm.completion(s).filled == 3
+    c2 = vm.completion(s)
+    assert c2.filled == 3 and c2.percent == 100
+    # 안 쓴 선택 계층은 100%를 막지 않되, 다음 추천으로는 '발견용' 노출(mcp).
+    assert c2.next_layer == "mcp"

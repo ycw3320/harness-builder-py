@@ -93,7 +93,7 @@ field_guides: dict[str, FieldGuidance] = {
             "패턴 예: Bash(명령접두:*), Read(./비밀파일), WebFetch(domain:*).",
             "넓게보다 좁게 막아라.",
         ],
-        recommended_default="Bash(:*)",
+        recommended_default="Bash(git status:*)",
     ),
     "hook": FieldGuidance(
         purpose="특정 순간에 자동 검사해 위반을 결정론적으로 차단하는 안전장치입니다(가장 강한 강제).",

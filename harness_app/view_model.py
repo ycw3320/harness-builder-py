@@ -132,23 +132,32 @@ class MaturityVM:
     next_hint: str | None  # 다음 레벨로 가는 최소 행동(없으면 최고 레벨)
 
 
-# 완성도 집계 대상(편집 가능 계층). verification 은 내보내기 전용이라 제외.
-_COUNTABLE = ["context", "permissions", "mcp", "guardrails", "workflow"]
+# 완성도 집계: 핵심 계층(항상 채워야 함) + 선택 계층(프로젝트별 — 비어 있으면 N/A로 분모 제외).
+# verification 은 내보내기 전용이라 제외. 선택 계층(mcp·workflow)을 안 쓰면 분모에서 빼 '100% 도달
+# 가능'을 보장한다 — layer_intros 가 이들을 '선택'으로 안내하는데 5계층 고정 분모는 안내를 따르면
+# 100%가 불가능한 자기모순이었다(신호 정합화).
+_CORE_LAYERS = ["context", "permissions", "guardrails"]
+_OPTIONAL_LAYERS = ["mcp", "workflow"]
 
 
 def completion(state: BuilderState) -> CompletionVM:
-    """§0.6 완성도 미터 — 구성된 영역 수 + 다음 추천(비어 있는) 영역."""
+    """§0.6 완성도 미터 — 핵심 계층 충족률(선택 계층은 쓸 때만 분모 포함) + 다음 추천 영역."""
     counts = {
         layer: sum(1 for c in state.ir.components if c.layer == layer and c.enabled)
-        for layer in _COUNTABLE
+        for layer in _CORE_LAYERS + _OPTIONAL_LAYERS
     }
-    filled = sum(1 for layer in _COUNTABLE if counts[layer] > 0)
-    total = len(_COUNTABLE)
-    nxt = next((layer for layer in _COUNTABLE if counts[layer] == 0), None)
+    core_filled = sum(1 for layer in _CORE_LAYERS if counts[layer] > 0)
+    optional_used = sum(1 for layer in _OPTIONAL_LAYERS if counts[layer] > 0)
+    filled = core_filled + optional_used
+    total = len(_CORE_LAYERS) + optional_used  # 안 쓴 선택 계층은 N/A(분모 제외)
+    # 다음 추천: 비어 있는 핵심 계층 우선, 없으면 비어 있는 선택 계층(발견용 — 100% 도달을 막지 않음).
+    nxt = next((layer for layer in _CORE_LAYERS if counts[layer] == 0), None) or next(
+        (layer for layer in _OPTIONAL_LAYERS if counts[layer] == 0), None
+    )
     return CompletionVM(
         filled=filled,
         total=total,
-        percent=round(filled / total * 100),
+        percent=round(filled / total * 100) if total else 0,
         next_layer=nxt,
         next_label=layer_meta[nxt]["label"] if nxt else None,
     )
