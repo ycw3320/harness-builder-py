@@ -31,7 +31,7 @@ OBSERVE_EVENTS = (
 )
 
 _PS1 = r"""param([string]$Event = "unknown")
-# 하네스 빌더 라이브 관측 훅 — 판정에 간섭하지 않음(항상 exit 0). 로컬 기록 전용.
+# 버클(하네스 빌더) 라이브 관측 훅 — 판정에 간섭하지 않음(항상 exit 0). 로컬 기록 전용.
 $raw = [Console]::In.ReadToEnd()
 try {
     $payload = ($raw | ConvertFrom-Json | ConvertTo-Json -Compress -Depth 12)

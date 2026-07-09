@@ -101,7 +101,7 @@ class BuilderWindow(QMainWindow):
         self.theme_name = os.environ.get("HB_THEME") or self._settings.value("theme", "light")
         if self.theme_name not in THEMES:
             self.theme_name = "light"
-        self.setWindowTitle("하네스 빌더 — 실행 전 시뮬레이터형")
+        self.setWindowTitle("버클 — Claude Code 하네스 빌더")
         self.resize(1180, 720)
         self.setMinimumSize(960, 640)  # frozen(PyInstaller) 환경 창 축소 방어
 
