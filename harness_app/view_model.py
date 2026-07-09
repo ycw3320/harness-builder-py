@@ -225,7 +225,7 @@ _SPECS: dict[str, list[FieldSpec]] = {
             "대상 패턴",
             "line",
             placeholder="Bash(rm -rf:*)",
-            tip="무엇에 적용할지. 예: Bash(rm -rf:*) = 'rm -rf'로 시작하는 명령 / Read(./secret) = 특정 파일 읽기. 넓게보다 좁게.",
+            tip="무엇에 적용할지. 예: Bash(rm -rf:*) = 'rm -rf'로 시작하는 명령 / Read(./secret) = 특정 파일 읽기. MCP 도구는 mcp__서버__도구 형식(예: mcp__github__create_issue). 넓게보다 좁게.",
         ),
     ],
     "mcp-server": [
@@ -297,7 +297,14 @@ _SPECS: dict[str, list[FieldSpec]] = {
             "list",
             tip="이 역할이 쓸 도구만 적으세요. 예: Read, Grep, Write. 적게 줄수록 안전합니다.",
         ),
-        FieldSpec("model", "모델(선택)", "line"),
+        FieldSpec(
+            "model",
+            "모델(선택)",
+            "line",
+            placeholder="sonnet",
+            tip="이 서브에이전트가 쓸 모델. 비우면 메인 세션 모델을 상속합니다. "
+            "가벼운 일=haiku(빠름·저비용), 균형=sonnet, 복잡한 추론=opus.",
+        ),
         FieldSpec("system_prompt", "시스템 프롬프트", "textarea"),
     ],
 }
