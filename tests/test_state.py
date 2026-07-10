@@ -114,3 +114,22 @@ def test_completion_meter():
     assert c2.filled == 3 and c2.percent == 100
     # 안 쓴 선택 계층은 100%를 막지 않되, 다음 추천으로는 '발견용' 노출(mcp).
     assert c2.next_layer == "mcp"
+
+
+def test_preview_assembled_and_applicability():
+    """1-A: 산출물 실제 텍스트 노출 + '언제 적용되나' 정직한 타이밍 뷰."""
+    from harness_app import view_model as vm
+
+    s = BuilderState("demo", preset="safety-first")
+    files = dict(vm.assembled_files(s))
+    # 프로젝트 CLAUDE.md(경로는 <project>/CLAUDE.md, _APPLY/global 병합용 제외)에 prose 내용이
+    # 실제로 담긴다(발견 C: 빈 시뮬 대신 실텍스트).
+    claude = next(c for p, c in files.items() if p.endswith("CLAUDE.md") and "_APPLY" not in p)
+    assert "프로젝트 개요" in claude
+
+    apps = vm.applicability(s)
+    # prose(context)=상시 맥락 / hook=조건부(이벤트+matcher) / policy-doc=자동로드 안 됨(정직 표기).
+    assert any(a.always_on and "항상" in a.when for a in apps if a.layer == "context")
+    hook = next(a for a in apps if "PreToolUse" in a.when)
+    assert not hook.always_on
+    assert any("자동 로드하진 않음" in a.when for a in apps)

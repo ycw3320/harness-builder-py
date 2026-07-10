@@ -446,6 +446,62 @@ def export_paths(state: BuilderState) -> list[str]:
     return [vf.path for vf in tree]
 
 
+def assembled_files(state: BuilderState) -> list[tuple[str, str]]:
+    """생성될 산출물 (경로, 내용) — 미리보기(1-A)의 본체.
+
+    발견 C 대응: prose/CLAUDE.md 는 시뮬 효과가 0이라 지침만 쓴 초심자는 빈 시뮬 화면을 봤다.
+    assemble 된 실제 파일 내용을 그대로 노출해 '무엇이 만들어지나'를 조립 중에 보게 한다.
+    """
+    return [(vf.path, vf.content) for vf in assemble_project(state.ir, state.scaffold)]
+
+
+@dataclass(frozen=True)
+class ApplicabilityVM:
+    title: str
+    layer: str
+    when: str  # 이 규칙이 '언제' 적용되나(정직한 타이밍 모델)
+    always_on: bool  # 상시 적용(맥락) vs 조건부 발동
+
+
+def _applies_when(c) -> tuple[str, bool]:
+    """kind 기반 결정론 타이밍 설명 — 휴리스틱 텍스트 매칭이 아니라 규칙 종류가 정하는 사실.
+
+    prose 는 매 요청에 항상 주입되는 맥락, hook/permission 은 조건이 맞을 때만 발동한다는
+    초심자 멘탈모델을 심는다. policy-doc 은 CC 가 자동 로드하지 않음을 정직히 표기(수동 참조).
+    """
+    k = c.kind
+    if k == "prose-guideline":
+        return "항상 — 매 요청에 맥락(CLAUDE.md)으로 주입", True
+    if k == "policy-doc":
+        return "참고 문서(.claude/rules) — Claude 가 자동 로드하진 않음(수동 참조)", False
+    if k == "permission-rule":
+        return (
+            f"도구 호출이 '{getattr(c, 'pattern', '')}' 과 일치할 때 → {getattr(c, 'action', '')}",
+            False,
+        )
+    if k == "hook":
+        return (
+            f"{getattr(c, 'event', '')} + '{getattr(c, 'matcher_tool', '')}' 일치 시 스크립트 실행",
+            False,
+        )
+    if k == "mcp-server":
+        return "연결된 외부 도구 — 세션 내내 사용 가능", True
+    if k == "sub-agent":
+        return f"'{getattr(c, 'name', '')}' 역할로 위임될 때", False
+    return "—", False
+
+
+def applicability(state: BuilderState) -> list[ApplicabilityVM]:
+    """각 활성 규칙이 '언제' 적용되나 — 미리보기의 정직한 규칙-타이밍 뷰(1-A)."""
+    out: list[ApplicabilityVM] = []
+    for c in state.ir.components:
+        if not c.enabled:
+            continue
+        when, always = _applies_when(c)
+        out.append(ApplicabilityVM(title=c.title, layer=c.layer, when=when, always_on=always))
+    return out
+
+
 def sim_items(state: BuilderState) -> list[SimVM]:
     """라이브 결정론 시뮬레이터 (LLM 0회) — 기본 시나리오 평가."""
     out: list[SimVM] = []

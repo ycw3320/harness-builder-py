@@ -146,8 +146,8 @@ QProgressBar#meter { background: $surface_alt; border: none; border-radius: 4px;
 QProgressBar#meter::chunk { background: $accent; border-radius: 4px; }
 
 QListWidget { background: transparent; border: none; outline: none; }
-QListWidget::item { margin: 2px 4px; border-radius: 8px; }
-QListWidget::item:selected { background: $selected_bg; }
+QListWidget::item { margin: 2px 4px; border-radius: 8px; color: $text; }
+QListWidget::item:selected { background: $selected_bg; color: $text; }
 
 QScrollArea { background: transparent; border: none; }
 QScrollArea > QWidget > QWidget { background: transparent; }

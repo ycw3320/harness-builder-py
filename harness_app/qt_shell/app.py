@@ -168,6 +168,12 @@ class BuilderWindow(QMainWindow):
             report = write_tree(tree, Path(dest), strategy=MergeStrategy.SKIP_EXISTING)
             self._show_export_done(dest, report)
 
+    # 1-A: 미리보기 — 생성될 산출물 실제 텍스트 + '언제 적용되나'(모달) ---
+    def _open_preview(self) -> None:
+        from .preview_dialog import PreviewDialog  # 지연 import
+
+        PreviewDialog(self, self.state).exec()
+
     def _show_landing(self) -> None:
         self._stack.setCurrentIndex(0)
 
@@ -441,6 +447,13 @@ class BuilderWindow(QMainWindow):
         head.addStretch(1)
         intro = make_btn("소개", "addBtn", self._show_landing, tip="소개 화면 다시 보기")
         head.addWidget(intro)
+        preview = make_btn(
+            "미리보기",
+            "addBtn",
+            self._open_preview,
+            tip="생성될 CLAUDE.md·설정 파일의 실제 내용과 각 규칙이 언제 적용되는지 확인",
+        )
+        head.addWidget(preview)
         live = make_btn(
             "라이브 관측",
             "addBtn",
