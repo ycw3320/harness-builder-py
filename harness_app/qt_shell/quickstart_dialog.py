@@ -67,7 +67,9 @@ class QuickStartDialog(QDialog):
         self._persona_group.setExclusive(True)
         for key, label, _preset in PERSONAS:
             b = QPushButton(label)
-            b.setObjectName("addBtn")
+            # choiceBtn: 선택(:checked) 상태가 틴트+accent 로 보이는 3택1 전용 스타일 —
+            # addBtn 엔 checked 규칙이 없어 어느 성향이 선택됐는지 안 보였음(사용자 피드백).
+            b.setObjectName("choiceBtn")
             b.setCheckable(True)
             b.setChecked(key == self._persona)
             b.clicked.connect(lambda _c=False, k=key: self._set_persona(k))

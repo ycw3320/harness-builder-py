@@ -121,6 +121,16 @@ QPushButton#addBtn {
 }
 QPushButton#addBtn:hover { border: 1px solid $accent; color: $accent; }
 
+/* 3택1 선택 버튼(퀵스타트 성향 등) — 선택 상태를 틴트+accent 로 명시(RuleToggle 체크와 동일 문법) */
+QPushButton#choiceBtn {
+    background: $surface_alt; color: $text; border: 1px solid $border;
+    border-radius: 7px; padding: 8px 12px; font-size: 12px; font-weight: 600;
+}
+QPushButton#choiceBtn:hover { border: 1px solid $accent; }
+QPushButton#choiceBtn:checked {
+    background: $selected_bg; border: 1px solid $accent; color: $accent;
+}
+
 QFrame#guideBox { background: $surface_alt; border: 1px solid $border; border-radius: 8px; }
 QFrame#ahaCard { background: $selected_bg; border: 1px solid $accent; border-radius: 10px; }
 
