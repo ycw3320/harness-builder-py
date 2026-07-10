@@ -302,6 +302,18 @@ class BuilderWindow(QMainWindow):
         self._nav = nav
         v.addWidget(nav, 1)
 
+        # 테마 토글 — 좌하단 '설정 코너'(데스크톱 관례). 환경 설정을 기능 버튼 줄(우패널
+        # head: 소개·미리보기·라이브 관측·도움말·LLM)과 분리해 과밀 해소.
+        theme_row = QHBoxLayout()
+        theme_lbl = QLabel("테마")
+        theme_lbl.setObjectName("faint")
+        theme_row.addWidget(theme_lbl)
+        theme_row.addWidget(self._theme_toggle())
+        theme_row.addStretch(1)
+        tw = QWidget()
+        tw.setLayout(theme_row)
+        v.addWidget(tw)
+
     def _on_nav(self, li: QListWidgetItem) -> None:
         self.state.set_selected_layer(layer_order[self._nav.row(li)])
 
@@ -468,7 +480,6 @@ class BuilderWindow(QMainWindow):
         head.addWidget(helpb)
         gear = make_btn("LLM 설정", "addBtn", self._open_settings)
         head.addWidget(gear)
-        head.addWidget(self._theme_toggle())
         head_w = QWidget()
         head_w.setLayout(head)
         v.addWidget(head_w)
