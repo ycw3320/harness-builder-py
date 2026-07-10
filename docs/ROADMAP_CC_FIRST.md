@@ -75,6 +75,10 @@ deny 훅 경고. 발견 A를 *탐지*하는 저비용 절반(근본 해결은 3-
 **3-A. 시뮬↔산출물 정합 코드젠 통일** (발견 A 근본 해결) — `action`+`matcher`+`path_glob`을 실제 exit-2 가드로
 코드젠 export + `simulate`/export 단일 생성기 통일. **frozen 변경**(export_ir·simulate·enforcement) → 승인+재박제.
 "시뮬에서 막힌 것 = 산출물에서 막힘" 계약 성립 → Lv4 "검증됨"이 진실이 됨.
+- **실측 발견(2026-07-10, 함께 수정)**: `glob_to_regexp` 치환 순서 버그 — `**/`→`(?:.*/)?` 삽입 후
+  `*`→`[^/]*` 치환이 삽입된 `.*`까지 오염시켜 `**`가 "최대 한 단계 디렉터리"로 축소. 실증:
+  `sub/dir/.env`가 시뮬=통과 / 실제 bash hook=차단(과소 매칭 = 시뮬이 현실보다 덜 막음).
+  frozen 골든 재박제 필요 항목.
 
 **3-B. settings.json 핵심 필드 저작** — 신규 config kind로 `model`·`permission.defaultMode`(관련도 HIGH 2종)
 + `env`(medium) 병합 export. 현재 settings.json은 permissions·hooks 두 키뿐.

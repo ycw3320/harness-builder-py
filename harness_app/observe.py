@@ -32,7 +32,11 @@ OBSERVE_EVENTS = (
 
 _PS1 = r"""param([string]$Event = "unknown")
 # 버클(하네스 빌더) 라이브 관측 훅 — 판정에 간섭하지 않음(항상 exit 0). 로컬 기록 전용.
-$raw = [Console]::In.ReadToEnd()
+# stdin 은 UTF-8 스트림으로 직접 읽는다 — [Console]::In 은 시스템 로케일(CP949)로 읽어
+# 한글 프롬프트·경로가 깨졌음(실측 발견). 리다이렉트된 stdin 에서도 안전한 방식.
+$stdin = [Console]::OpenStandardInput()
+$reader = New-Object System.IO.StreamReader($stdin, [System.Text.Encoding]::UTF8)
+$raw = $reader.ReadToEnd()
 try {
     $payload = ($raw | ConvertFrom-Json | ConvertTo-Json -Compress -Depth 12)
 } catch { $payload = $null }
@@ -145,7 +149,12 @@ def parse_live_line(line: str) -> LiveEvent | None:
 
 
 def _tool_action(payload: dict) -> dict | None:
-    """hook payload(tool_name·tool_input) → 시뮬 action dict."""
+    """hook payload(tool_name·tool_input) → 시뮬 action dict.
+
+    실측 발견: 실제 payload 의 file_path 는 Windows 절대경로(백슬래시)인데 시뮬 glob 은
+    슬래시 기준이라 '.env 쓰기 차단'이 "매칭 없음"으로 오표시됐다(실행은 차단됐는데 재현만 어긋남).
+    → 슬래시 정규화 + payload.cwd 기준 상대화로 시뮬 시나리오와 같은 좌표계로 맞춘다.
+    """
     tool = payload.get("tool_name")
     if not tool:
         return None
@@ -155,7 +164,11 @@ def _tool_action(payload: dict) -> dict | None:
         if ti.get("command"):
             action["command"] = str(ti["command"])
         if ti.get("file_path"):
-            action["path"] = str(ti["file_path"])
+            path = str(ti["file_path"]).replace("\\", "/")
+            cwd = str(payload.get("cwd") or "").replace("\\", "/").rstrip("/")
+            if cwd and path.lower().startswith(cwd.lower() + "/"):
+                path = path[len(cwd) + 1 :]  # 프로젝트 루트 기준 상대경로(원본 대소문자 유지)
+            action["path"] = path
     return action
 
 
