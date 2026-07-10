@@ -51,7 +51,7 @@ from .dialogs import open_llm_settings, show_export_done, show_receive_review, s
 
 # 하위호환 re-export — 기존 import 경로(tests 포함) 보존. R#8 분해로 실제 정의는 각 모듈.
 from .landing import LandingPage
-from .theme import DARK, FONT_STACK, LIGHT, THEMES, build_qss  # noqa: F401
+from .theme import DARK, FONT_STACK, LIGHT, THEMES, build_palette, build_qss  # noqa: F401
 from .widgets import (  # noqa: F401
     _TITLE_FIELD,
     ClickableLabel,
@@ -189,8 +189,11 @@ class BuilderWindow(QMainWindow):
     def _apply_theme(self) -> None:
         self._settings.setValue("theme", self.theme_name)
         self._force_rebuild()
-        # 위젯 생성 후 스타일시트 적용 → 전 위젯 polish 보장(특히 버튼/콤보 배경)
-        QApplication.instance().setStyleSheet(build_qss(self.tokens))
+        app = QApplication.instance()
+        # 팔레트를 테마와 일치 → QSS 미지정 폴백(QDialog 배경·아이템뷰 등)이 라이트로 남는
+        # 문제 근절. 그 위에 QSS 를 얹어 세부 스타일 지정(버튼/콤보 배경 등 polish 보장).
+        app.setPalette(build_palette(self.tokens))
+        app.setStyleSheet(build_qss(self.tokens))
 
     def set_theme(self, name: str) -> None:
         if name != self.theme_name and name in THEMES:

@@ -20,6 +20,27 @@ def _make_window(qapp, temp_settings, preset="safety-first"):
     return win
 
 
+def test_theme_sets_matching_palette(qapp, temp_settings):
+    """다크 QuickStart 라벨 실종 회귀: 팔레트를 테마와 맞춰야 QDialog 배경 폴백이 밝게 남지 않는다.
+    (팔레트 미설정 시 다크에서도 QDialog 배경=라이트 → '* color:$text' 밝은 글씨가 묻힘)."""
+    from PySide6.QtGui import QColor, QPalette
+    from PySide6.QtWidgets import QApplication
+
+    from harness_app.qt_shell.theme import DARK, LIGHT
+
+    def role(r):  # QColor.name() 은 소문자 hex → QColor 로 정규화 비교
+        return QApplication.instance().palette().color(r)
+
+    win = _make_window(qapp, temp_settings)
+    win.set_theme("dark")
+    qapp.processEvents()
+    assert role(QPalette.ColorRole.Window) == QColor(DARK["bg"])
+    assert role(QPalette.ColorRole.WindowText) == QColor(DARK["text"])
+    win.set_theme("light")
+    qapp.processEvents()
+    assert role(QPalette.ColorRole.Window) == QColor(LIGHT["bg"])
+
+
 def test_landing_skip_requires_landing_and_aha(qapp, temp_settings):
     win = _make_window(qapp, temp_settings)
     assert win._stack.currentIndex() == 0  # 첫 실행 = 랜딩

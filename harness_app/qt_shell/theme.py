@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from string import Template
 
+from PySide6.QtGui import QColor, QPalette
+
 # ── 테마 토큰 (Apple 미니멀 — 워크플로 'Graphite Crème' 합성, WCAG AA 검증) ──
 LIGHT = {
     "bg": "#FBFBF9",
@@ -163,6 +165,43 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 
 def build_qss(tokens: dict) -> str:
     return _QSS.substitute(font=FONT_STACK, **tokens)
+
+
+# QSS 가 색을 지정하지 않는 위젯·상태는 팔레트로 폴백한다. 팔레트를 테마와 맞추지 않으면
+# 라이트 기본 팔레트가 남아, QDialog 배경(QSS 규칙 없음)이 밝은 회색으로 뜨고 그 위에
+# `* { color: $text }` 로 칠한 밝은 글씨가 묻혀 사라진다(다크 테마 QuickStart 라벨 실종의 근본 원인).
+# QSS 는 팔레트 위에 얹혀 '지정한 부분만' 덮으므로 기존 스타일과 충돌하지 않는다.
+_PALETTE_ROLES = {
+    QPalette.ColorRole.Window: "bg",
+    QPalette.ColorRole.WindowText: "text",
+    QPalette.ColorRole.Base: "surface",
+    QPalette.ColorRole.AlternateBase: "surface_alt",
+    QPalette.ColorRole.Text: "text",
+    QPalette.ColorRole.Button: "surface",
+    QPalette.ColorRole.ButtonText: "text",
+    QPalette.ColorRole.ToolTipBase: "surface",
+    QPalette.ColorRole.ToolTipText: "text",
+    QPalette.ColorRole.PlaceholderText: "text_faint",
+    QPalette.ColorRole.Highlight: "accent",
+    QPalette.ColorRole.HighlightedText: "on_accent",
+    QPalette.ColorRole.Link: "accent",
+}
+
+
+def build_palette(tokens: dict) -> QPalette:
+    """테마 토큰 → QPalette (QSS 미지정 폴백을 테마색과 일치시켜 다크 대비 붕괴 근절)."""
+    pal = QPalette()
+    for role, key in _PALETTE_ROLES.items():
+        pal.setColor(role, QColor(tokens[key]))
+        # 비활성(창 비포커스) 그룹도 동일색 — 아이템뷰가 흐려지는 것 방지.
+        pal.setColor(QPalette.ColorGroup.Inactive, role, QColor(tokens[key]))
+    for role in (
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.ButtonText,
+    ):
+        pal.setColor(QPalette.ColorGroup.Disabled, role, QColor(tokens["text_faint"]))
+    return pal
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
