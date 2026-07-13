@@ -41,6 +41,31 @@ def test_theme_sets_matching_palette(qapp, temp_settings):
     assert role(QPalette.ColorRole.Window) == QColor(LIGHT["bg"])
 
 
+def test_close_to_tray_and_fallback(qapp, temp_settings):
+    """X 클릭 시: 트레이 가용 → 종료 대신 숨김(백그라운드) / 트레이 불가 → 기존처럼 종료."""
+    from PySide6.QtGui import QCloseEvent
+
+    class _FakeTray:  # offscreen 엔 실제 트레이가 없어 스텁으로 가용 상태를 재현
+        def isVisible(self):  # noqa: N802 (Qt API 명)
+            return True
+
+        def showMessage(self, *a, **k):  # noqa: N802 (Qt API 명)
+            pass
+
+    win = _make_window(qapp, temp_settings)
+    win._tray = _FakeTray()
+    ev = QCloseEvent()
+    win.closeEvent(ev)
+    assert not ev.isAccepted() and win.isHidden()  # 종료 대신 트레이로
+    assert temp_settings.value("tray_hint_seen", False, type=bool)  # 첫 회 안내 1회 기록
+
+    win2 = _make_window(qapp, temp_settings)
+    win2._tray = None  # 트레이 없는 환경
+    ev2 = QCloseEvent()
+    win2.closeEvent(ev2)
+    assert ev2.isAccepted()  # 폴백: X=종료 유지
+
+
 def test_landing_skip_requires_landing_and_aha(qapp, temp_settings):
     win = _make_window(qapp, temp_settings)
     assert win._stack.currentIndex() == 0  # 첫 실행 = 랜딩

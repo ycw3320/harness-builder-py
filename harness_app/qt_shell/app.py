@@ -10,7 +10,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, QSettings, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -24,11 +25,13 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QScrollArea,
     QSplitter,
     QStackedWidget,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -102,6 +105,7 @@ class BuilderWindow(QMainWindow):
         if self.theme_name not in THEMES:
             self.theme_name = "light"
         self.setWindowTitle("버클 — Claude Code 하네스 빌더")
+        self.setWindowIcon(_brand_icon())  # 작업표시줄·트레이 공용 브랜드 마크
         self.resize(1180, 720)
         self.setMinimumSize(960, 640)  # frozen(PyInstaller) 환경 창 축소 방어
 
@@ -129,6 +133,7 @@ class BuilderWindow(QMainWindow):
         self._sig: tuple | None = None
         self.state.subscribe(self._on_change)
         self._apply_theme()
+        self._init_tray()
 
     def _enter_builder(self) -> None:
         self._settings.setValue("landing_seen", True)
@@ -176,6 +181,59 @@ class BuilderWindow(QMainWindow):
 
     def _show_landing(self) -> None:
         self._stack.setCurrentIndex(0)
+
+    # 트레이 — X 로 닫으면 종료 대신 백그라운드(라이브 관측 유지), 우클릭 메뉴로 종료 ---
+    def _init_tray(self) -> None:
+        self._tray: QSystemTrayIcon | None = None
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return  # 트레이 없는 환경(offscreen·일부 원격 셸)은 기존 동작(X=종료) 유지
+        tray = QSystemTrayIcon(self.windowIcon(), self)
+        tray.setToolTip("버클 — Claude Code 하네스 빌더")
+        menu = QMenu()
+        menu.addAction("열기", self._restore_from_tray)
+        menu.addSeparator()
+        menu.addAction("종료", self._quit_from_tray)
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._on_tray_activated)
+        tray.show()
+        self._tray = tray
+        self._tray_menu = menu  # 참조 유지(GC 방지)
+        # 트레이 사용 중엔 마지막 창이 닫혀도 앱 유지 — 종료 결정은 트레이 메뉴가 담당.
+        # (메인 창이 숨은 상태에서 다이얼로그 하나 닫히면 앱이 통째로 꺼지던 것 방지)
+        QApplication.instance().setQuitOnLastWindowClosed(False)
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            self._restore_from_tray()
+
+    def _restore_from_tray(self) -> None:
+        self.show()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.raise_()
+        self.activateWindow()
+
+    def _quit_from_tray(self) -> None:
+        if self._tray is not None:
+            self._tray.hide()
+        QApplication.instance().quit()
+
+    def closeEvent(self, ev) -> None:  # noqa: N802 (Qt 가상함수명)
+        if getattr(self, "_tray", None) is not None and self._tray.isVisible():
+            ev.ignore()
+            self.hide()
+            if not self._settings.value("tray_hint_seen", False, type=bool):
+                self._settings.setValue("tray_hint_seen", True)
+                self._tray.showMessage(
+                    "버클은 백그라운드에서 계속 실행 중",
+                    "트레이 아이콘 클릭 = 다시 열기, 우클릭 → 종료 = 완전히 끄기.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    4000,
+                )
+            return
+        super().closeEvent(ev)
 
     # 테마 ---
     @property
@@ -873,6 +931,32 @@ class BuilderWindow(QMainWindow):
 
     def _show_welcome(self) -> None:
         show_welcome(self)
+
+
+def _brand_icon() -> QIcon:
+    """버클 브랜드 마크 — 파란 라운드 사각 + 체크(안전벨트를 '채운' 상태의 기호).
+
+    작업표시줄·트레이 공용. 트레이 배경(밝음/어두움)과 무관하게 식별되도록 테마 무관 고정색.
+    QSS image 미렌더 이슈와 무관하게 QPainter 직접 드로잉(RuleToggle 과 동일 접근).
+    """
+    pm = QPixmap(32, 32)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QColor("#0A6FD6"))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawRoundedRect(QRectF(1, 1, 30, 30), 8, 8)
+    pen = QPen(QColor("#FFFFFF"), 3.4)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    path = QPainterPath()
+    path.moveTo(9, 16.5)
+    path.lineTo(14, 21.5)
+    path.lineTo(23, 10.5)
+    p.drawPath(path)
+    p.end()
+    return QIcon(pm)
 
 
 def _load_app_font() -> str:
