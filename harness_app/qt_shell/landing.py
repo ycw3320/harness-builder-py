@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .widgets import make_btn
+from .widgets import brand_pixmap, make_btn
 
 
 class LandingPage(QWidget):
@@ -45,9 +45,20 @@ class LandingPage(QWidget):
         wrap.addWidget(colw)
         wrap.addStretch(1)
 
+        # 히어로: 브랜드 마크 + 워드마크 — 마크(안전벨트 채움 기호)가 이름의 유래를 시각으로 설명
+        hero_row = QHBoxLayout()
+        hero_row.setSpacing(12)
+        mark = QLabel()
+        mark.setPixmap(brand_pixmap(40))
+        mark.setFixedSize(40, 40)
+        hero_row.addWidget(mark)
         hero = QLabel("버클")
         hero.setObjectName("heroTitle")
-        col.addWidget(hero)
+        hero_row.addWidget(hero)
+        hero_row.addStretch(1)
+        hero_w = QWidget()
+        hero_w.setLayout(hero_row)
+        col.addWidget(hero_w)
         tag = QLabel(
             "Claude Code 하네스 빌더 · AI 코딩 도구에게 '안전벨트'를 채우는 가장 쉬운 방법"
         )

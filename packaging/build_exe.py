@@ -21,6 +21,9 @@ PyInstaller.__main__.run(
         "--noconfirm",
         "--windowed",
         "--onefile",
+        # exe 파일 아이콘(탐색기·바로가기) — 생성/재생성은 python packaging/gen_icon.py
+        "--icon",
+        str(ROOT / "packaging" / "buckle.ico"),
         # 번들 폰트를 런타임 __file__ 기준 경로(harness_app/qt_shell/fonts)에 동일 배치
         "--add-data",
         f"{FONTS}{os.pathsep}harness_app/qt_shell/fonts",

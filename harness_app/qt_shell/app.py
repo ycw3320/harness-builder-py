@@ -10,8 +10,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, QSettings, Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, Qt, QTimer
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -63,6 +63,7 @@ from .widgets import (  # noqa: F401
     RowWidget,
     RuleToggle,
     _dot,
+    brand_pixmap,
     make_btn,
 )
 
@@ -934,29 +935,14 @@ class BuilderWindow(QMainWindow):
 
 
 def _brand_icon() -> QIcon:
-    """버클 브랜드 마크 — 파란 라운드 사각 + 체크(안전벨트를 '채운' 상태의 기호).
+    """버클 브랜드 아이콘 — 작업표시줄·트레이 공용, 크기별 재드로잉으로 전 해상도 선명.
 
-    작업표시줄·트레이 공용. 트레이 배경(밝음/어두움)과 무관하게 식별되도록 테마 무관 고정색.
-    QSS image 미렌더 이슈와 무관하게 QPainter 직접 드로잉(RuleToggle 과 동일 접근).
+    드로잉 단일 소스는 widgets.brand_pixmap (랜딩 히어로·exe .ico 생성과 공유).
     """
-    pm = QPixmap(32, 32)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setBrush(QColor("#0A6FD6"))
-    p.setPen(Qt.PenStyle.NoPen)
-    p.drawRoundedRect(QRectF(1, 1, 30, 30), 8, 8)
-    pen = QPen(QColor("#FFFFFF"), 3.4)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    p.setPen(pen)
-    path = QPainterPath()
-    path.moveTo(9, 16.5)
-    path.lineTo(14, 21.5)
-    path.lineTo(23, 10.5)
-    p.drawPath(path)
-    p.end()
-    return QIcon(pm)
+    icon = QIcon()
+    for s in (16, 24, 32, 48, 64, 128, 256):
+        icon.addPixmap(brand_pixmap(s))
+    return icon
 
 
 def _load_app_font() -> str:
