@@ -39,8 +39,9 @@ _TITLE_FIELD = {  # AI 생성 후 제목으로 쓸 대표 필드
 
 
 def brand_pixmap(size: int) -> QPixmap:
-    """버클 브랜드 마크 — 파란 라운드 사각 + 흰 체크(안전벨트를 '채운' 상태의 기호).
+    """버클 브랜드 마크 — 안전벨트 버클 클래스프(클립이 꽂힌 본체 + 빨간 해제 버튼).
 
+    제품명('버클')과 앱의 핵심 비유(안전벨트)를 시각으로 직결(사용자 확정안 A).
     단일 소스: 창/트레이 아이콘(app), 랜딩 히어로, exe .ico 생성(packaging/gen_icon.py)이
     전부 이 함수를 쓴다. 크기별 재드로잉으로 어느 해상도에서도 선명(비트맵 축소 금지).
     트레이·탐색기 배경(밝음/어두움)과 무관하게 식별되도록 테마 무관 고정색.
@@ -50,18 +51,19 @@ def brand_pixmap(size: int) -> QPixmap:
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setBrush(QColor("#0A6FD6"))
     p.setPen(Qt.PenStyle.NoPen)
-    p.drawRoundedRect(QRectF(1 * k, 1 * k, 30 * k, 30 * k), 8 * k, 8 * k)
-    pen = QPen(QColor("#FFFFFF"), max(1.6, 3.4 * k))
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    p.setPen(pen)
-    path = QPainterPath()
-    path.moveTo(9 * k, 16.5 * k)
-    path.lineTo(14 * k, 21.5 * k)
-    path.lineTo(23 * k, 10.5 * k)
-    p.drawPath(path)
+    # 본체
+    p.setBrush(QColor("#0A6FD6"))
+    p.drawRoundedRect(QRectF(5 * k, 11 * k, 22 * k, 20 * k), 6 * k, 6 * k)
+    # 슬롯(흰 홈) — 클립이 꽂히는 자리
+    p.setBrush(QColor("#FFFFFF"))
+    p.drawRoundedRect(QRectF(10.5 * k, 13 * k, 11 * k, 4.5 * k), 2 * k, 2 * k)
+    # 클립(텅) — 슬롯 안으로 삽입(흰 테가 양옆·아래로 남아 '꽂힘'이 읽힘)
+    p.setBrush(QColor("#0A6FD6"))
+    p.drawRoundedRect(QRectF(12.5 * k, 1.5 * k, 7 * k, 14 * k), 2.5 * k, 2.5 * k)
+    # 빨간 해제 버튼(PRESS) — 소형에서도 식별점
+    p.setBrush(QColor("#E5484D"))
+    p.drawEllipse(QRectF(12.5 * k, 20.5 * k, 7 * k, 7 * k))
     p.end()
     return pm
 
