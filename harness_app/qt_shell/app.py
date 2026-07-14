@@ -105,7 +105,8 @@ class BuilderWindow(QMainWindow):
         self.theme_name = os.environ.get("HB_THEME") or self._settings.value("theme", "light")
         if self.theme_name not in THEMES:
             self.theme_name = "light"
-        self.setWindowTitle("버클 — Claude Code 하네스 빌더")
+        # 제품명은 '버클' 단독(사용자 확정) — 기능 수식어는 랜딩 태그라인 등 부제 자리에만.
+        self.setWindowTitle("버클")
         self.setWindowIcon(_brand_icon())  # 작업표시줄·트레이 공용 브랜드 마크
         self.resize(1180, 720)
         self.setMinimumSize(960, 640)  # frozen(PyInstaller) 환경 창 축소 방어
@@ -189,7 +190,7 @@ class BuilderWindow(QMainWindow):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return  # 트레이 없는 환경(offscreen·일부 원격 셸)은 기존 동작(X=종료) 유지
         tray = QSystemTrayIcon(self.windowIcon(), self)
-        tray.setToolTip("버클 — Claude Code 하네스 빌더")
+        tray.setToolTip("버클")
         menu = QMenu()
         menu.addAction("열기", self._restore_from_tray)
         menu.addSeparator()
