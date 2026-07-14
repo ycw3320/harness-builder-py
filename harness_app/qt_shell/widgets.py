@@ -46,6 +46,9 @@ def brand_pixmap(size: int) -> QPixmap:
     전부 이 함수를 쓴다. 크기별 재드로잉으로 어느 해상도에서도 선명(비트맵 축소 금지).
     트레이·탐색기 배경(밝음/어두움)과 무관하게 식별되도록 테마 무관 고정색.
     """
+    # Claude 시그니처 팔레트(사용자 확정): 테라코타 + 아이보리 2톤 — Claude Code 동반
+    # 도구라는 정체성을 색으로도 표시. 소형 식별점은 아이보리 해제 버튼이 담당.
+    body, ivory = "#DA7756", "#FAF9F5"
     k = size / 32.0
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
@@ -53,16 +56,16 @@ def brand_pixmap(size: int) -> QPixmap:
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setPen(Qt.PenStyle.NoPen)
     # 본체
-    p.setBrush(QColor("#0A6FD6"))
+    p.setBrush(QColor(body))
     p.drawRoundedRect(QRectF(5 * k, 11 * k, 22 * k, 20 * k), 6 * k, 6 * k)
-    # 슬롯(흰 홈) — 클립이 꽂히는 자리
-    p.setBrush(QColor("#FFFFFF"))
+    # 슬롯(아이보리 홈) — 클립이 꽂히는 자리
+    p.setBrush(QColor(ivory))
     p.drawRoundedRect(QRectF(10.5 * k, 13 * k, 11 * k, 4.5 * k), 2 * k, 2 * k)
-    # 클립(텅) — 슬롯 안으로 삽입(흰 테가 양옆·아래로 남아 '꽂힘'이 읽힘)
-    p.setBrush(QColor("#0A6FD6"))
+    # 클립(텅) — 슬롯 안으로 삽입(밝은 테가 양옆·아래로 남아 '꽂힘'이 읽힘)
+    p.setBrush(QColor(body))
     p.drawRoundedRect(QRectF(12.5 * k, 1.5 * k, 7 * k, 14 * k), 2.5 * k, 2.5 * k)
-    # 빨간 해제 버튼(PRESS) — 소형에서도 식별점
-    p.setBrush(QColor("#E5484D"))
+    # 해제 버튼(PRESS)
+    p.setBrush(QColor(ivory))
     p.drawEllipse(QRectF(12.5 * k, 20.5 * k, 7 * k, 7 * k))
     p.end()
     return pm
