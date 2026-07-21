@@ -406,7 +406,10 @@ class BuilderWindow(QMainWindow):
         rows_lay = QVBoxLayout(holder)
         rows_lay.setContentsMargins(0, 0, 0, 0)
         rows_lay.setSpacing(10)
-        fill = self._llm_fill_component if self._llm_ready() else None
+        # LLM 'AI 채우기' UI 보류(사용자 결정) — 기능 확장 시 아래 한 줄로 복원:
+        #   fill = self._llm_fill_component if self._llm_ready() else None
+        # (harness_llm 패키지·_llm_fill_component·_llm_ready·_open_settings 는 휴면 보존)
+        fill = None
         self._rows: list[RowWidget] = []
         for r in vm.rows_for_selected(self.state):
             rw = RowWidget(
@@ -538,8 +541,8 @@ class BuilderWindow(QMainWindow):
         head.addWidget(live)
         helpb = make_btn("도움말", "addBtn", self._show_welcome)
         head.addWidget(helpb)
-        gear = make_btn("LLM 설정", "addBtn", self._open_settings)
-        head.addWidget(gear)
+        # [LLM 설정] 버튼 보류(사용자 결정) — AI 채우기 확장 시 복원(_open_settings 휴면 유지):
+        #   head.addWidget(make_btn("LLM 설정", "addBtn", self._open_settings))
         head_w = QWidget()
         head_w.setLayout(head)
         v.addWidget(head_w)
