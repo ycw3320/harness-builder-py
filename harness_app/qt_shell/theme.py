@@ -20,10 +20,10 @@ LIGHT = {
     "text": "#1D1D1F",
     "text_muted": "#6E6E73",
     "text_faint": "#8E8E93",
-    "accent": "#0A6FD6",
-    "accent_hover": "#085BB5",
+    "accent": "#B85A38",  # Claude 테라코타(딥) — 흰글씨 버튼 4.6:1·크림 위 텍스트 4.5:1(WCAG AA)
+    "accent_hover": "#A5482A",
     "on_accent": "#FFFFFF",
-    "selected_bg": "#E4EFFB",
+    "selected_bg": "#F5E4DC",  # 소프트 피치 틴트(선택 행·아하 카드)
     "danger": "#C9362B",
     "warn": "#B26A00",
     "ok": "#177C3D",
@@ -40,10 +40,10 @@ DARK = {
     "text": "#ECECEE",
     "text_muted": "#A0A0A6",
     "text_faint": "#8D8D93",
-    "accent": "#0A84FF",
-    "accent_hover": "#409CFF",
+    "accent": "#CF6D4E",  # Claude 테라코타(밝게) — 다크배경 위 텍스트 4.8:1(WCAG AA)
+    "accent_hover": "#E0785C",
     "on_accent": "#FFFFFF",
-    "selected_bg": "#0A3A66",
+    "selected_bg": "#3A281F",  # 뮤트 테라코타 다크 틴트
     "danger": "#FF6961",
     "warn": "#FFB340",
     "ok": "#30D158",
