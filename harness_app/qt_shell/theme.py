@@ -27,9 +27,11 @@ LIGHT = {
     "danger": "#C9362B",
     "warn": "#B26A00",
     "ok": "#177C3D",
+    # 결정방식 3색 — 파랑(추천) 제거하고 따뜻한 심각도 램프(녹→금→러스트)로. Claude 팔레트
+    # 통일(차가운 파랑이 테라코타와 섞여 보이던 문제 해소) + 신호등식 의미(자유→추천→직접승인).
     "involvement_auto": "#177C3D",
-    "involvement_assisted": "#0A6FD6",
-    "involvement_manual": "#AD5A08",
+    "involvement_assisted": "#96640F",
+    "involvement_manual": "#BC4A2C",
 }
 DARK = {
     "bg": "#1C1C1E",
@@ -48,8 +50,8 @@ DARK = {
     "warn": "#FFB340",
     "ok": "#30D158",
     "involvement_auto": "#30D158",
-    "involvement_assisted": "#5AA9FF",
-    "involvement_manual": "#FF9F0A",
+    "involvement_assisted": "#E0A93A",
+    "involvement_manual": "#F0663A",
 }
 THEMES = {"light": LIGHT, "dark": DARK}
 
