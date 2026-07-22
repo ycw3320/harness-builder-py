@@ -163,6 +163,40 @@ def completion(state: BuilderState) -> CompletionVM:
     )
 
 
+@dataclass(frozen=True)
+class NextActionVM:
+    """'지금 할 일 1개' — 화면 전체에서 단 하나의 다음 행동(직관성 재설계의 축).
+
+    결정론 우선순위: 정합성 오류 해결 > 성숙도 다음 단계 > 빈 핵심 영역 채우기 > 내보내기.
+    """
+
+    label: str  # 버튼 문구(행동형)
+    action: str  # "fix-lint" | "jump" | "export"
+    target_layer: str | None  # jump 대상 계층(없으면 None)
+
+
+def next_action(state: BuilderState) -> NextActionVM:
+    errors = [f for f in lint_ir(state.ir, rulesets=("core", "security")) if f["level"] == "error"]
+    if errors:
+        return NextActionVM(
+            label=f"정합성 오류 {len(errors)}개 해결하기", action="fix-lint", target_layer=None
+        )
+    mat = maturity(state)
+    if mat.next_hint:
+        if "오류" in mat.next_hint or "경고" in mat.next_hint:  # Lv3 변형: 검사 결과 해결
+            return NextActionVM(label=mat.next_hint, action="fix-lint", target_layer=None)
+        target = {0: "permissions", 1: "permissions", 2: "guardrails", 3: "guardrails"}.get(
+            mat.level
+        )
+        return NextActionVM(label=mat.next_hint, action="jump", target_layer=target)
+    comp = completion(state)
+    if comp.next_layer in _CORE_LAYERS:
+        return NextActionVM(
+            label=f"'{comp.next_label}' 영역 채우기 →", action="jump", target_layer=comp.next_layer
+        )
+    return NextActionVM(label="폴더 선택 → 하네스 생성", action="export", target_layer=None)
+
+
 _OUTCOME_LABEL = {
     "blocked-by-hook": "hook 차단",
     "blocked-by-permission": "권한 차단",
@@ -208,8 +242,17 @@ _SPECS: dict[str, list[FieldSpec]] = {
             option_labels=("이 프로젝트만", "모든 프로젝트"),
             tip="이 프로젝트에만(.claude/CLAUDE.md) 또는 내 모든 프로젝트에(~/.claude/CLAUDE.md) 적용.",
         ),
-        FieldSpec("heading", "섹션 제목", "line"),
-        FieldSpec("body", "본문", "textarea", placeholder="외부 LLM 답변을 붙여넣으세요…"),
+        FieldSpec("heading", "섹션 제목", "line", placeholder="예: 프로젝트 개요"),
+        FieldSpec(
+            "body",
+            "본문",
+            "textarea",
+            placeholder=(
+                "이 프로젝트에 대해 Claude 가 늘 알아야 할 것을 평범한 문장으로 적으세요.\n"
+                "예: React + FastAPI 프로젝트. 빌드: npm run build · 테스트: pytest.\n"
+                "예: 모든 답변은 한국어로. 커밋 전 반드시 테스트 실행."
+            ),
+        ),
     ],
     "permission-rule": [
         FieldSpec(

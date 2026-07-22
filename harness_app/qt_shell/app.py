@@ -547,48 +547,88 @@ class BuilderWindow(QMainWindow):
         head_w.setLayout(head)
         v.addWidget(head_w)
 
-        # 성숙도(질) + 완성도 미터(양) + 다음 추천 영역 (§0.6 → PM7-S4 질적 진화)
+        # ── 직관성 재설계: '지금 할 일 1개' 중심 ──────────────────────────────
+        # 계기판(모든 정보 동시 노출)이 아니라 흐름(상태 한 줄 → 다음 행동 하나 → 나머지는
+        # 요약·접이식)으로. 사용자 피드백: "뭘 하면 되는지 감이 안 잡힘".
         comp = vm.completion(self.state)
         mat = vm.maturity(self.state)
-        sect = self._section(f"성숙도 {mat.label} · 구성 {comp.filled}/{comp.total}")
+        act = vm.next_action(self.state)
+
+        status_card = QFrame()
+        status_card.setObjectName("introCard")
+        sc = QVBoxLayout(status_card)
+        sc.setContentsMargins(14, 12, 14, 12)
+        sc.setSpacing(8)
+        sect = QLabel(f"성숙도 {mat.label} · 구성 {comp.filled}/{comp.total}")
+        sect.setObjectName("h1")
         sect.setToolTip(mat.detail)  # 산식 공개 — 게임화 역효과 통제
-        v.addWidget(sect)
+        sc.addWidget(sect)
         meter = QProgressBar()
         meter.setObjectName("meter")
         meter.setRange(0, 100)
         meter.setValue(comp.percent)
         meter.setTextVisible(False)
         meter.setFixedHeight(8)
-        v.addWidget(meter)
-        if mat.next_hint:
-            mh = QLabel(f"다음 레벨: {mat.next_hint}")
-            mh.setObjectName("faint")
-            mh.setWordWrap(True)
-            mh.setToolTip(mat.detail)
-            v.addWidget(mh)
-        if comp.next_layer:
-            nxt = make_btn(
-                f"다음 추천 영역: {comp.next_label} →",
-                "addBtn",
-                lambda _c=False, ly=comp.next_layer: self.state.set_selected_layer(ly),
+        sc.addWidget(meter)
+        # 단 하나의 다음 행동 버튼 — 결정론(오류 해결 > 성숙도 다음 단계 > 빈 영역 > 내보내기)
+        if act.action == "export":
+            act_btn = make_btn(
+                act.label, "primaryBtn", self._on_export, tip="폴더를 고르면 .claude/ 가 생성돼요"
             )
-            v.addWidget(nxt)
-        else:
-            done = QLabel("핵심 영역 구성 완료 — 내보낼 준비 완료 ✓")
-            done.setObjectName("muted")
-            done.setWordWrap(True)
-            v.addWidget(done)
+        elif act.action == "jump" and act.target_layer:
+            act_btn = make_btn(
+                f"다음: {act.label}",
+                "primaryBtn",
+                lambda _c=False, ly=act.target_layer: self.state.set_selected_layer(ly),
+                tip="클릭하면 해당 영역으로 이동합니다",
+            )
+        else:  # fix-lint — 바로 아래 검사 목록이 보이므로 이동 없음
+            act_btn = make_btn(f"다음: {act.label}", "primaryBtn", lambda: None)
+        sc.addWidget(act_btn)
+        v.addWidget(status_card)
 
-        # PM6-S2/S3: before/after 2열 시연(빈 IR vs 현재 IR) + reason + '켜진 규칙' 토글.
-        # 우패널은 _on_change 가 항상 재빌드 → 토글 시 즉시 역전(추가 배선 0).
-        # PM6-S4: 인과 체감(규칙 끄기) 후 정의 페이드인 — '체감 먼저, 정의 나중'.
+        # 정합성 검사 — 문제가 있을 때만 노출(없으면 상태 카드가 함축)
+        lints = vm.lint_items(self.state)
+        if lints:
+            v.addWidget(self._section("정합성 검사"))
+            for li in lints:
+                lbl = QLabel(f"[{li.code}] {li.message}")
+                lbl.setObjectName("lintErr" if li.level == "error" else "lintWarn")
+                lbl.setWordWrap(True)
+                v.addWidget(lbl)
+
+        # PM6 아하 서사 보존: 배너(달성 후) + 지킴이 요약(항상) + 상세·실험(접이식).
         if self._aha_revealed:
             v.addWidget(self._aha_banner())
-        v.addWidget(self._section("하네스 없으면 ↔ 지금 · 실행 전 시뮬레이터(LLM 0회)"))
+        v.addWidget(self._section("지킴이 — 이 하네스가 막아주는 것"))
         compare = vm.sim_compare(self.state)
         has_invalid = any(s.after_raw == "invalid" for s in compare)
+        for s in compare:  # 시나리오당 1줄 요약(결과·색), 차단 줄 클릭=원인 점프
+            v.addWidget(
+                self._sim_line(
+                    s.label.replace(" 시도", ""),
+                    s.after_outcome,
+                    s.after_raw,
+                    "after",
+                    s.after_blocked_by,
+                )
+            )
+        if any(s.changed for s in compare):
+            base = QLabel("규칙이 없으면 전부 통과였어요 — 실행 전 시뮬레이터(LLM 0회)가 재현")
+            base.setObjectName("faint")
+            base.setWordWrap(True)
+            v.addWidget(base)
+
+        # 상세(before/after 카드)·실험(규칙 꺼보기)은 접이식 — 아하 전엔 펼침(체감 유도)
+        details_head = ClickableLabel("", self._toggle_sim_details)
+        details_head.setObjectName("muted")
+        v.addWidget(details_head)
+        details = QWidget()
+        dv = QVBoxLayout(details)
+        dv.setContentsMargins(0, 0, 0, 0)
+        dv.setSpacing(6)
         for s in compare:
-            v.addWidget(self._sim_compare_row(s))
+            dv.addWidget(self._sim_compare_row(s))
         rules = vm.sim_rules(self.state)
         if rules:
             # 힌트는 상황별 1개: 패턴 오류 > 꺼보세요(아하 전) > 허용뿐 안내 — 거짓 약속 금지
@@ -606,9 +646,9 @@ class BuilderWindow(QMainWindow):
                 hint = QLabel(hint_text)
                 hint.setObjectName("faint")
                 hint.setWordWrap(True)
-                v.addWidget(hint)
+                dv.addWidget(hint)
             for r in rules:
-                v.addWidget(self._rule_toggle(r))
+                dv.addWidget(self._rule_toggle(r))
         else:  # 차단 규칙 0개(빈 시작·가져오기 등) — 아하 도달 경로 안내(끊긴 서사 폴백)
             none_hint = QLabel(
                 "차단 규칙(hook·권한)을 추가하면 여기서 꺼보며 효과를 확인할 수 있어요 — "
@@ -616,32 +656,18 @@ class BuilderWindow(QMainWindow):
             )
             none_hint.setObjectName("faint")
             none_hint.setWordWrap(True)
-            v.addWidget(none_hint)
-
-        v.addWidget(self._section("정합성 검사"))
-        lints = vm.lint_items(self.state)
-        if not lints:
-            ok = QLabel("문제 없음 — 내보낼 준비 완료")
-            ok.setObjectName("muted")
-            v.addWidget(ok)
-        for li in lints:
-            lbl = QLabel(f"[{li.code}] {li.message}")
-            lbl.setObjectName("lintErr" if li.level == "error" else "lintWarn")
-            lbl.setWordWrap(True)
-            v.addWidget(lbl)
-
-        v.addWidget(self._section("산출 미리보기"))
-        for p in vm.export_paths(self.state)[:8]:
-            f = QLabel(p)
-            f.setObjectName("faint")
-            v.addWidget(f)
+            dv.addWidget(none_hint)
+        v.addWidget(details)
+        self._sim_details_widget = details
+        self._sim_details_head = details_head
+        self._apply_sim_details()
 
         v.addStretch(1)
-        # PM7-S2: 통합 .harness.json — 작업 저장(앱 끄면 소실 해소)=공유(팀 표준 전달) 단일 포맷
+        # 파일 작업(보조) — 저장=공유 단일 포맷(.harness.json) + 역가져오기
         filerow = QHBoxLayout()
         filerow.addWidget(
             make_btn(
-                "파일로 저장",
+                "저장",
                 "addBtn",
                 self._on_save_file,
                 tip="현재 작업 전체를 .harness.json 하나로 저장 — 그대로 공유할 수 있어요",
@@ -649,25 +675,60 @@ class BuilderWindow(QMainWindow):
         )
         filerow.addWidget(
             make_btn(
-                "파일 열기",
+                "열기",
                 "addBtn",
                 self._on_open_file,
                 tip="받은/저장한 .harness.json 을 '무엇을 하는지' 확인 후 가져오기",
+            )
+        )
+        filerow.addWidget(
+            make_btn(
+                "폴더 가져오기",
+                "addBtn",
+                self._on_import,
+                tip="이미 .claude/ 가 있는 프로젝트를 읽어 카드로 펼칩니다",
             )
         )
         filerow.addStretch(1)
         frw = QWidget()
         frw.setLayout(filerow)
         v.addWidget(frw)
-        imp = make_btn("기존 폴더 가져오기", "addBtn", self._on_import)
-        v.addWidget(imp)
+        scafrow = QHBoxLayout()
+        scaf_lbl = QLabel("생성 방식")
+        scaf_lbl.setObjectName("faint")
+        scafrow.addWidget(scaf_lbl)
         combo = QComboBox()
-        combo.addItems(["minimal", "harness-only"])
-        combo.setCurrentText(self.state.scaffold)
-        combo.currentTextChanged.connect(self.state.set_scaffold)
-        v.addWidget(combo)
-        btn = make_btn("폴더 선택 → 하네스 생성", "primaryBtn", self._on_export)
-        v.addWidget(btn)
+        # (표시 라벨, 실제 값) — raw 값 노출이 비직관적이던 것 교정
+        for label, val in (
+            ("최소 스캐폴드 — README·.gitignore 포함", "minimal"),
+            ("하네스만 — .claude/ 와 CLAUDE.md 만", "harness-only"),
+        ):
+            combo.addItem(label, val)
+        combo.setCurrentIndex(0 if self.state.scaffold == "minimal" else 1)
+        combo.currentIndexChanged.connect(lambda i, c=combo: self.state.set_scaffold(c.itemData(i)))
+        scafrow.addWidget(combo, 1)
+        srw = QWidget()
+        srw.setLayout(scafrow)
+        v.addWidget(srw)
+        # 다음 행동이 이미 '내보내기'면 상태 카드 버튼이 담당 — 같은 primary 중복 방지.
+        if act.action != "export":
+            btn = make_btn("폴더 선택 → 하네스 생성", "primaryBtn", self._on_export)
+            v.addWidget(btn)
+
+    def _toggle_sim_details(self) -> None:
+        self._sim_details_open = not getattr(self, "_sim_details_open", False)
+        self._apply_sim_details()
+
+    def _apply_sim_details(self) -> None:
+        """접이식 상세·실험 반영 — 아하 전엔 기본 펼침(끄기 체감이 정의 트리거)."""
+        if not hasattr(self, "_sim_details_open"):
+            self._sim_details_open = not self._aha_revealed
+        open_ = self._sim_details_open
+        self._sim_details_widget.setVisible(open_)
+        # 화살표 글리프(▸▾)는 번들 폰트 미지원으로 깨짐 — ASCII +/- 로 대비(기존 교훈).
+        self._sim_details_head.setText(
+            "-  자세히 · 규칙 꺼보기 실험 (접기)" if open_ else "+  자세히 · 규칙 꺼보기 실험"
+        )
 
     # PM6-S2/S3: before/after 시연 헬퍼 ---
     def _outcome_style(self, raw: str, column: str) -> tuple[str, str]:

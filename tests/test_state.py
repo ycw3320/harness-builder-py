@@ -116,6 +116,25 @@ def test_completion_meter():
     assert c2.next_layer == "mcp"
 
 
+def test_next_action_priority():
+    """'지금 할 일 1개' 결정론: 성숙도 힌트 > 빈 핵심 영역 > 내보내기."""
+    from harness_app import view_model as vm
+
+    # safety-first = Lv4·핵심 완성 → 내보내기
+    s = BuilderState("demo", preset="safety-first")
+    a = vm.next_action(s)
+    assert a.action == "export"
+    # minimal = 권한·가드레일 비어 있음 → 성숙도 힌트(권한 영역 점프)
+    s2 = BuilderState("demo", preset="minimal")
+    a2 = vm.next_action(s2)
+    assert a2.action == "jump" and a2.target_layer == "permissions"
+    # 차단 hook 을 끄면 Lv 하락 → 가드레일 방향 행동
+    s3 = BuilderState("demo", preset="safety-first")
+    s3.toggle("guard-hook-secrets")
+    a3 = vm.next_action(s3)
+    assert a3.action in ("jump", "fix-lint") and a3.action != "export"
+
+
 def test_preview_assembled_and_applicability():
     """1-A: 산출물 실제 텍스트 노출 + '언제 적용되나' 정직한 타이밍 뷰."""
     from harness_app import view_model as vm
