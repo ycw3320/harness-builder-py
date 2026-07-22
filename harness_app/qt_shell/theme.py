@@ -142,6 +142,13 @@ QLabel#helpChip {
 }
 QLabel#helpChip:hover { border: 1px solid $accent; color: $accent; }
 
+/* 툴팁(? 칩 설명 등) — QSS 미지정 시 OS 기본(다크모드면 어두운 박스)으로 떠서 앱 테마와
+   어긋나고 대비가 나빴음(사용자 리포). 테마색으로 명시해 두 테마 모두 고대비 보장. */
+QToolTip {
+    background: $surface; color: $text; border: 1px solid $border;
+    border-radius: 6px; padding: 5px 8px; font-size: 12px;
+}
+
 QWidget#landing { background: $bg; }
 QLabel#heroTitle { font-size: 30px; font-weight: 700; color: $text; }
 QLabel#tagline { font-size: 15px; color: $text_muted; }
