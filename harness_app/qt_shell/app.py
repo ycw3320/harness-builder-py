@@ -1076,9 +1076,15 @@ def make_app():
     app.setStyle("Fusion")
     family = _load_app_font()
     font = QFont(family, 10)
-    # 한글 가로획 모음 드롭아웃 방지: 풀힌팅이 소형에서 가는 획을 깎으므로 힌팅 끔 + 안티앨리어스.
-    font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
-    font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
+    # 폰트별 렌더링 분기 — 무조건 힌팅 끔(구 방식)은 Malgun 임시방편이었고, 화면 최적화 폰트인
+    # Pretendard 엔 오히려 소형에서 획이 흐릿·불균일하게 보였다(사용자 리포). Pretendard 는 자체
+    # 힌팅이 좋으므로 네이티브 힌팅(+ClearType 서브픽셀)을 살리고, Malgun 폴백일 때만 가로획
+    # 드롭아웃 방지용 힌팅 끔 + 그레이스케일 AA 를 유지한다.
+    if "Pretendard" in family:
+        font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
+    else:
+        font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+        font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
     app.setFont(font)
     win = BuilderWindow()
     return app, win
