@@ -115,6 +115,10 @@ class BuilderState:
         base = create_component("prose-guideline", "context")
         self._set_components([*self.ir.components, base.model_copy(update={"scope": scope})])
 
+    def add_prebuilt(self, comp: HarnessComponent) -> None:
+        """이미 만들어진 컴포넌트를 append — MCP 카탈로그 등 값이 채워진 컴포넌트 추가용."""
+        self._set_components([*self.ir.components, comp])
+
     def remove(self, comp_id: str) -> None:
         self._set_components([c for c in self.ir.components if c.id != comp_id])
 

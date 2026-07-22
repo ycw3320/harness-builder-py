@@ -151,22 +151,27 @@ field_guides: dict[str, FieldGuidance] = {
         ],
     ),
     "mcp-server": FieldGuidance(
-        purpose="모델이 외부 시스템(DB·검색·사내 API)에 연결되는 통로를 정의합니다.",
+        purpose="모델이 외부 시스템(파일·검색·GitHub·DB 등)에 연결되는 통로를 정의합니다. "
+        "'+ 외부 도구'로 카탈로그에서 고르면 명령·인자가 자동 채워집니다.",
         produces_file=".mcp.json",
         ask_llm_template=(
-            "{{서비스}} 에 연결하는 MCP 서버 설정을 만들어줘. 실행 명령은 {{명령}}, "
-            "필요한 비밀키는 {{키이름}} (값은 ${VAR} 플레이스홀더로)."
+            "내 프로젝트에서 GitHub 에 연결하는 Claude Code MCP 서버 설정을 만들어줘. "
+            "실행 명령(command)·인자(args)·필요한 환경변수(env, 값은 ${VAR} 플레이스홀더)를 알려줘. "
+            "패키지명은 2026년 현재 유지되는 공식/벤더 배포로."
         ),
         good_examples=[
-            'github: command npx, args ["-y","@modelcontextprotocol/server-github"], '
-            "env GITHUB_TOKEN=${GITHUB_TOKEN}",
-            "postgres: command npx, env DATABASE_URL=${DATABASE_URL}",
+            'filesystem: command npx, args ["-y","@modelcontextprotocol/server-filesystem","<허용 폴더>"]',
+            'github: command docker, args ["run","-i","--rm","-e","GITHUB_PERSONAL_ACCESS_TOKEN",'
+            '"ghcr.io/github/github-mcp-server"], env GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN}',
         ],
         anti_example=AntiExample(
             text="env에 실제 토큰 값을 직접 입력",
             why="비밀키가 산출물에 박혀 유출된다. 반드시 ${VAR} 플레이스홀더만 쓰고 .env에 실제 값을 둔다.",
         ),
-        tips=["env 값은 ${VAR} 형태로만.", "필요한 서버만 연결(공격면 최소)."],
+        tips=[
+            "'+ 외부 도구'로 카탈로그에서 고르면 대부분 자동 — 경로·비밀키만 채우면 됩니다.",
+            "env 값은 ${VAR} 형태로만. 필요한 서버만 연결(공격면 최소).",
+        ],
     ),
 }
 

@@ -272,20 +272,32 @@ _SPECS: dict[str, list[FieldSpec]] = {
         ),
     ],
     "mcp-server": [
-        FieldSpec("server_name", "서버 이름", "line", placeholder="github"),
+        FieldSpec(
+            "server_name",
+            "서버 이름(별칭)",
+            "line",
+            placeholder="예: github, filesystem",
+            tip="이 서버를 부를 별칭 — .mcp.json 의 키가 됩니다. '+ 외부 도구'로 카탈로그에서 고르면 자동 입력.",
+        ),
         FieldSpec(
             "command",
             "실행 명령",
             "line",
-            placeholder="npx",
-            tip="외부 도구를 띄우는 명령. 예: npx = Node 패키지 실행기.",
+            placeholder="npx / uvx / docker",
+            tip="서버를 띄우는 실행기. npx=Node · uvx=Python(uv) · docker=컨테이너. 카탈로그에서 고르면 자동.",
         ),
-        FieldSpec("args", "인자", "list"),
+        FieldSpec(
+            "args",
+            "인자",
+            "list",
+            placeholder="예: -y  @scope/server-name  <경로>",
+            tip="실행 인자(한 줄에 하나). <각괄호>로 표시된 자리표시자는 실제 경로로 바꾸세요. 카탈로그 선택 시 자동.",
+        ),
         FieldSpec(
             "env",
-            "환경변수",
+            "환경변수(비밀키)",
             "dict",
-            tip="비밀키는 값에 실제 키 대신 ${VAR} 만 적으세요(예: ${GITHUB_TOKEN}). 실제 값은 .env 파일에 둡니다.",
+            tip="비밀키는 값에 실제 키 대신 ${VAR} 만(예: ${GITHUB_TOKEN}). 실제 값은 생성되는 .env 에 넣습니다 — 설정 파일엔 안 박힘.",
         ),
     ],
     "hook": [

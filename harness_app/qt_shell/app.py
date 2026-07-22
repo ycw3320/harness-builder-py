@@ -472,6 +472,20 @@ class BuilderWindow(QMainWindow):
         self._reseed_examples = True
         self.state.load_preset(key)
 
+    def _add_mcp(self, _checked: bool = False) -> None:
+        """외부 도구 추가 — 카탈로그 픽커 우선(고르면 자동 채움), '직접 입력'은 기존 빈 카드."""
+        from .catalog_dialog import McpCatalogDialog  # 지연 import
+
+        dlg = McpCatalogDialog(self)
+        if not dlg.exec():
+            return
+        if dlg.result_entry is not None:
+            from ..catalog import build_mcp
+
+            self.state.add_prebuilt(build_mcp(dlg.result_entry, "mcp"))
+        elif dlg.result_manual:
+            self.state.add_component("mcp-server")
+
     def _add_bar(self) -> QWidget:
         """선택 계층의 추가 가능 kind 버튼 — 동적 추가(요구 1). 고급 토글로 advanced kind 노출."""
         bar = QWidget()
@@ -486,11 +500,13 @@ class BuilderWindow(QMainWindow):
             lay.addWidget(lbl)
         for entry in entries:
             kind = entry["kind"]
-            b = make_btn(
-                f"+ {kind_registry[kind]['label']}",
-                "addBtn",
-                lambda _checked, k=kind: self.state.add_component(k),
+            # MCP 는 빈 카드 대신 카탈로그 픽커로(빈 칸에 뭘 넣을지 모름 해소).
+            on_add = (
+                self._add_mcp
+                if kind == "mcp-server"
+                else (lambda _checked, k=kind: self.state.add_component(k))
             )
+            b = make_btn(f"+ {kind_registry[kind]['label']}", "addBtn", on_add)
             lay.addWidget(b)
         lay.addStretch(1)
         if any(not e["basic"] for e in all_entries):
