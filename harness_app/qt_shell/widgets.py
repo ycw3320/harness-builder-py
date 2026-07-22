@@ -595,6 +595,17 @@ class RowWidget(QFrame):
         self._open = value
         if value:
             self._editor.setVisible(True)
+            # 펼침 높이 실측 — 생성 시 어림값(_FIELD_H·가이드 116 고정)은 문구 줄바꿈에 따라
+            # 부족해져 내용이 눌리고 버튼 라벨이 사라졌음(사용자 리포: '얇은 네모').
+            # 현재 폭 기준 heightForWidth 로 실제 필요 높이를 계산한다.
+            lay = self._editor.layout()
+            w = max(240, self.width() - 24)
+            eh = (
+                lay.heightForWidth(w)
+                if lay is not None and lay.hasHeightForWidth()
+                else self._editor.sizeHint().height()
+            )
+            self._expanded = min(740, self.HEADER_H + eh + 24)
         self._anim.stop()
         self._anim.setStartValue(self.maximumHeight())
         self._anim.setEndValue(self._expanded if value else self.COLLAPSED)

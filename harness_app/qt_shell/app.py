@@ -940,6 +940,20 @@ class BuilderWindow(QMainWindow):
         if promoted is None:
             QMessageBox.information(self, "강제수준", "이미 최고 강제수준(자동 차단)입니다.")
             return
+        # 되돌리기 없는 변환(항목이 다른 계층으로 이동) — 사고성 클릭 방지 확인(사용자 리포:
+        # 라벨 안 보이는 버튼을 눌렀다가 '컨텍스트가 사라졌다'고 인지).
+        kind_label = {"policy-doc": "정책 문서(가드레일)", "hook": "자동 차단 hook(가드레일)"}.get(
+            promoted.kind, promoted.kind
+        )
+        ok = QMessageBox.question(
+            self,
+            "강제수준 올리기",
+            f"'{comp.title}' 을(를) {kind_label} 로 승격할까요?\n\n"
+            f"같은 의도를 더 강하게 집행하는 형태로 바뀌고, "
+            f"항목이 '{vm.layer_meta[promoted.layer]['label']}' 영역으로 이동합니다.",
+        )
+        if ok != QMessageBox.StandardButton.Yes:
+            return
         self.state.replace(comp_id, promoted)
         self.state.set_selected_layer(promoted.layer)  # 승격 결과(가드레일)가 보이도록
         for rw in self._rows:
