@@ -521,6 +521,10 @@ class BuilderWindow(QMainWindow):
     # 우 패널 (S5/S6) + 테마 토글 ---
     def _rebuild_right(self) -> None:
         # PM6-S2: 내용이 늘어 720px 를 초과 → 스크롤로 감싸 카드(word-wrap)가 압축되지 않게.
+        # 재빌드마다 스크롤이 맨 위로 튀던 것(규칙 토글 시 특히 불편) 방지 — 직전 스크롤 위치를
+        # 캡처했다가 레이아웃 정착 후 복원(setValue 는 max 로 자동 클램프라 내용 축소도 안전).
+        _prev = getattr(self, "_right_scroll", None)
+        _saved_y = _prev.verticalScrollBar().value() if _prev is not None else 0
         outer = self._clear(self._right_host, (0, 0, 0, 0))
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -532,6 +536,9 @@ class BuilderWindow(QMainWindow):
         v.setSpacing(10)
         scroll.setWidget(body)
         outer.addWidget(scroll)
+        self._right_scroll = scroll
+        if _saved_y:
+            QTimer.singleShot(0, lambda s=scroll, y=_saved_y: s.verticalScrollBar().setValue(y))
 
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
