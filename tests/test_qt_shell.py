@@ -353,3 +353,66 @@ def test_live_dialog_falls_back_to_claude_import(qapp, temp_settings, tmp_path):
     assert dlg._ir is not None and dlg._ir.components
     assert "역import" in dlg._status.text()
     dlg.close()
+
+
+def test_permission_assembler_dialog_builds_rule(qapp, temp_settings):
+    """권한 조립기: 도구·동작·입력 → 미리보기 갱신 + 확정 시 검증된 규칙 산출."""
+    from harness_app.qt_shell.permission_assembler_dialog import PermissionAssemblerDialog
+
+    win = _make_window(qapp, temp_settings)
+    dlg = PermissionAssemblerDialog(win)
+    dlg._set_action("deny")
+    dlg._input.setText("git push --force")  # 기본 도구=Bash, prefix=on
+    qapp.processEvents()
+    assert "Bash(git push --force:*)" in dlg._preview_pat.text()
+    assert "시작하는" in dlg._preview_exp.text()
+    dlg._confirm()
+    assert dlg.result_rule is not None
+    assert dlg.result_rule.action == "deny"
+    assert dlg.result_rule.pattern == "Bash(git push --force:*)"
+    dlg.close()
+
+
+def test_permission_assembler_add_appends_component(qapp, temp_settings):
+    """_add_permission 배선: 조립 결과가 IR 에 프리빌트로 주입되는지."""
+    win = _make_window(qapp, temp_settings)
+    before = len(win.state.ir.components)
+    rule = __import__("harness_app.perm_assembler", fromlist=["build_permission"]).build_permission(
+        "ask", "Bash", "sudo", True
+    )
+    win.state.add_prebuilt(rule)
+    qapp.processEvents()
+    assert len(win.state.ir.components) == before + 1
+    assert any(
+        c.kind == "permission-rule" and c.pattern == "Bash(sudo:*)" for c in win.state.ir.components
+    )
+
+
+def test_hook_catalog_dialog_lists_all_and_picks(qapp, temp_settings):
+    """훅 카탈로그: 선택 시 검증된 훅 항목 반환."""
+    from harness_app.catalog import HOOK_CATALOG
+    from harness_app.qt_shell.hook_catalog_dialog import HookCatalogDialog
+
+    win = _make_window(qapp, temp_settings)
+    dlg = HookCatalogDialog(win)
+    entry = next(e for e in HOOK_CATALOG if e.key == "env-write-block")
+    dlg._pick(entry)
+    assert dlg.result_entry is entry
+    dlg.close()
+
+
+def test_hook_catalog_add_appends_verified_hook(qapp, temp_settings):
+    """_add_hook 배선: build_hook 산출이 IR 에 프리빌트로 주입 + 스크립트/메타 보존."""
+    from harness_app.catalog import build_hook, hook_catalog_entry
+
+    win = _make_window(qapp, temp_settings)
+    before = len(win.state.ir.components)
+    entry = hook_catalog_entry("git-dir-protect")
+    win.state.add_prebuilt(build_hook(entry, "guardrails"))
+    qapp.processEvents()
+    assert len(win.state.ir.components) == before + 1
+    h = next(
+        c for c in win.state.ir.components if c.kind == "hook" and c.title == entry.display_name
+    )
+    assert h.path_glob == "**/.git/**"
+    assert h.script_body == entry.script_body

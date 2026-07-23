@@ -486,6 +486,32 @@ class BuilderWindow(QMainWindow):
         elif dlg.result_manual:
             self.state.add_component("mcp-server")
 
+    def _add_hook(self, _checked: bool = False) -> None:
+        """보호 훅 추가 — 카탈로그 픽커 우선(검증된 스크립트 자동 채움), '직접 작성'은 빈 카드."""
+        from .hook_catalog_dialog import HookCatalogDialog  # 지연 import
+
+        dlg = HookCatalogDialog(self)
+        if not dlg.exec():
+            return
+        if dlg.result_entry is not None:
+            from ..catalog import build_hook
+
+            self.state.add_prebuilt(build_hook(dlg.result_entry, self.state.selected_layer))
+        elif dlg.result_manual:
+            self.state.add_component("hook")
+
+    def _add_permission(self, _checked: bool = False) -> None:
+        """권한 규칙 추가 — 조립기 우선(도구·평문 입력 → 패턴 자동 조립), '직접 입력'은 기존 빈 카드."""
+        from .permission_assembler_dialog import PermissionAssemblerDialog  # 지연 import
+
+        dlg = PermissionAssemblerDialog(self)
+        if not dlg.exec():
+            return
+        if dlg.result_rule is not None:
+            self.state.add_prebuilt(dlg.result_rule)
+        elif dlg.result_manual:
+            self.state.add_component("permission-rule")
+
     def _add_bar(self) -> QWidget:
         """선택 계층의 추가 가능 kind 버튼 — 동적 추가(요구 1). 고급 토글로 advanced kind 노출."""
         bar = QWidget()
@@ -500,12 +526,13 @@ class BuilderWindow(QMainWindow):
             lay.addWidget(lbl)
         for entry in entries:
             kind = entry["kind"]
-            # MCP 는 빈 카드 대신 카탈로그 픽커로(빈 칸에 뭘 넣을지 모름 해소).
-            on_add = (
-                self._add_mcp
-                if kind == "mcp-server"
-                else (lambda _checked, k=kind: self.state.add_component(k))
-            )
+            # MCP·권한·훅은 빈 카드 대신 픽커/조립기로(빈 칸에 뭘 넣을지 모름 해소).
+            _pickers = {
+                "mcp-server": self._add_mcp,
+                "permission-rule": self._add_permission,
+                "hook": self._add_hook,
+            }
+            on_add = _pickers.get(kind) or (lambda _checked, k=kind: self.state.add_component(k))
             b = make_btn(f"+ {kind_registry[kind]['label']}", "addBtn", on_add)
             lay.addWidget(b)
         lay.addStretch(1)

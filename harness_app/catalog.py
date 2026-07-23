@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from harness_core.ir.factory import create_component
-from harness_core.ir.schema import McpServer
+from harness_core.ir.schema import Hook, McpServer
 
 CATALOG_LAST_VERIFIED = "2026-07"
 
@@ -169,5 +169,266 @@ def build_mcp(entry: CatalogEntry, layer: str = "mcp") -> McpServer:
             "command": entry.command,
             "args": list(entry.args),
             "env": {e.key: f"${{{e.key}}}" for e in entry.env if e.required},
+        }
+    )
+
+
+# =====================================================================================
+# 훅(가드레일) 카탈로그 — 검증된 보호 훅을 한 번에 추가('빈 스크립트에 뭘 쓸지 모름' 해소)
+# =====================================================================================
+#
+# 모든 스크립트는 **jq 없이 grep 기반**(Windows Git Bash 에 jq 미설치 → jq 의존 훅은 exit 127
+# 로 fail-OPEN 하는 함정을 회피). 프리셋 block-secrets.sh 와 동일 계열. 각 스크립트는 가짜
+# tool_input payload 로 exit code 계약을 로컬 검증했고(tests/test_hook_catalog.py 가 동일
+# 검증을 회귀로 고정), 적대 검증(2026-07-23)이 통과시킨 것만 시드.
+#
+# **시뮬레이터 정합(해자 sim≡실제):** 코어 simulate 는 훅을 matcher_tool(도구명) + path_glob
+# (경로) 로만 판정하고 '명령어 내용'은 못 본다. 따라서:
+#   - 경로 기반 위험(.env/.git/.ssh 쓰기) → action="deny" + path_glob → sim 이 정확히 차단 재현.
+#   - 명령어 내용 위험(rm -rf/force push/curl|sh/sudo) → deny 로 하면 matcher=Bash 라 sim 이
+#     '모든 Bash 차단'으로 오표시됨. 그래서 action="warn"(sim 은 warn 을 무시 → '허용'으로 정직
+#     표시, 실제 CC 는 stderr 경고 후 진행). 완전 차단이 필요하면 권한 규칙 Bash(...) 금지로 유도.
+
+
+@dataclass(frozen=True)
+class HookCatalogEntry:
+    key: str
+    display_name: str
+    purpose: str  # 한 줄 한국어
+    protects: str  # 무엇을 지키나(평문)
+    matcher_tool: str  # sim·export 공용 도구 regex(예: "Write|Edit|MultiEdit", "Bash")
+    action: str  # "deny"(차단) | "warn"(경고만, 비차단)
+    path_glob: str | None  # deny 경로훅만 설정 — sim 이 이 glob 로 차단 재현
+    script_name: str
+    script_body: str
+    event: str = "PreToolUse"
+    note: str = ""
+
+    @property
+    def is_block(self) -> bool:
+        return self.action == "deny"
+
+
+# --- 스크립트 본문(로컬 exit-code 검증 완료본과 바이트 동일) ---
+
+_HOOK_ENV_WRITE = "\n".join(
+    [
+        "#!/usr/bin/env bash",
+        "# .env* 파일 쓰기 차단 — 시크릿 보호",
+        "input=$(cat)",
+        'path=$(printf \'%s\' "$input" | grep -oE \'"file_path"[[:space:]]*:[[:space:]]*"[^"]*"\' | head -1)',
+        'case "$path" in',
+        '  *.env*) echo "차단: .env 파일에는 쓸 수 없습니다 (시크릿 보호). 값은 이미 만들어진 .env 에 직접 넣으세요." >&2; exit 2;;',
+        "esac",
+        "exit 0",
+    ]
+)
+
+# .git/·.ssh/ 훅은 파일경로 '값'만 뽑아(백슬래시→슬래시 정규화) 디렉터리 경계로 정확 판정
+# — .gitignore/.github 등 유사 이름 오탐 방지.
+_EXTRACT_PATH_VALUE = (
+    'val=$(printf \'%s\' "$input" | grep -oE \'"file_path"[[:space:]]*:[[:space:]]*"[^"]*"\''
+    " | head -1 | grep -oE '\"[^\"]*\"$' | tr -d '\"')"
+)
+
+_HOOK_GIT_DIR = "\n".join(
+    [
+        "#!/usr/bin/env bash",
+        "# .git/ 내부 파일 쓰기 차단 — 저장소 무결성 보호(.gitignore 등 일반 파일은 허용)",
+        "input=$(cat)",
+        _EXTRACT_PATH_VALUE,
+        r'path="${val//\\\\//}"',
+        r'path="${path//\\//}"',
+        'case "/$path" in',
+        '  */.git/*) echo "차단: .git 내부 파일은 직접 수정할 수 없습니다 (git 명령을 사용하세요)." >&2; exit 2;;',
+        "esac",
+        "exit 0",
+    ]
+)
+
+_HOOK_SSH_KEY = "\n".join(
+    [
+        "#!/usr/bin/env bash",
+        "# .ssh/ 개인키·설정 쓰기 차단 — 자격증명 보호",
+        "input=$(cat)",
+        _EXTRACT_PATH_VALUE,
+        r'path="${val//\\\\//}"',
+        r'path="${path//\\//}"',
+        'case "/$path" in',
+        '  */.ssh/*) echo "차단: ~/.ssh 안의 키·설정은 수정할 수 없습니다 (자격증명 보호)." >&2; exit 2;;',
+        "esac",
+        "exit 0",
+    ]
+)
+
+_EXTRACT_COMMAND = 'cmd=$(printf \'%s\' "$input" | grep -oE \'"command"[[:space:]]*:[[:space:]]*"[^"]*"\' | head -1)'
+
+_HOOK_RM_RF = "\n".join(
+    [
+        "#!/usr/bin/env bash",
+        "# 재귀·강제 삭제(rm -rf 등) 경고 — 차단하지 않고 주의만(비가역 삭제 재고 유도)",
+        "input=$(cat)",
+        _EXTRACT_COMMAND,
+        'case "$cmd" in',
+        '  *"rm "*|*"rm -"*)',
+        "    if printf '%s' \"$cmd\" | grep -qE 'rm[[:space:]]+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|-r[[:space:]]+-f|-f[[:space:]]+-r|--recursive|--force)'; then",
+        '      echo "경고: 재귀·강제 삭제(rm -rf)는 비가역입니다. 대상 경로를 다시 확인하세요." >&2',
+        "      exit 1",
+        "    fi",
+        "    ;;",
+        "esac",
+        "exit 0",
+    ]
+)
+
+_HOOK_FORCE_PUSH = "\n".join(
+    [
+        "#!/usr/bin/env bash",
+        "# git 강제 푸시 경고 — 원격 히스토리 덮어쓰기 위험을 알림(차단 안 함)",
+        "input=$(cat)",
+        _EXTRACT_COMMAND,
+        "if printf '%s' \"$cmd\" | grep -qE 'git[[:space:]]+push'; then",
+        "  if printf '%s' \"$cmd\" | grep -qE '(--force|[[:space:]]-f([[:space:]]|$))'; then",
+        '    echo "경고: 강제 푸시는 원격 히스토리를 덮어씁니다. --force-with-lease 를 쓰거나 팀과 확인하세요." >&2',
+        "    exit 1",
+        "  fi",
+        "fi",
+        "exit 0",
+    ]
+)
+
+_HOOK_CURL_PIPE = "\n".join(
+    [
+        "#!/usr/bin/env bash",
+        "# 원격 스크립트 즉시 실행(curl|sh) 경고 — 검증 없는 코드 실행 위험 알림",
+        "input=$(cat)",
+        _EXTRACT_COMMAND,
+        "if printf '%s' \"$cmd\" | grep -qE '(curl|wget)[^|]*\\|[[:space:]]*(sudo[[:space:]]+)?(sh|bash|zsh)'; then",
+        '  echo "경고: 내려받은 스크립트를 곧바로 셸에 파이프하고 있습니다. 내용을 먼저 저장·검토하세요." >&2',
+        "  exit 1",
+        "fi",
+        "exit 0",
+    ]
+)
+
+_HOOK_SUDO = "\n".join(
+    [
+        "#!/usr/bin/env bash",
+        "# sudo 권한 상승 경고 — 시스템 전역 변경 주의 알림(차단 안 함)",
+        "input=$(cat)",
+        _EXTRACT_COMMAND,
+        "if printf '%s' \"$cmd\" | grep -qE '(^|[;&|[:space:]\"])sudo[[:space:]]'; then",
+        '  echo "경고: sudo 는 시스템 전역을 바꿉니다. 이 명령이 꼭 관리자 권한이어야 하는지 확인하세요." >&2',
+        "  exit 1",
+        "fi",
+        "exit 0",
+    ]
+)
+
+
+HOOK_CATALOG: tuple[HookCatalogEntry, ...] = (
+    HookCatalogEntry(
+        key="env-write-block",
+        display_name=".env 시크릿 쓰기 차단",
+        purpose=".env·.env.* 파일에 대한 쓰기를 실제로 막습니다.",
+        protects="API 키·토큰·비밀번호가 담기는 .env 파일 보호",
+        matcher_tool="Write|Edit|MultiEdit",
+        action="deny",
+        path_glob="**/.env*",
+        script_name="block-env-write.sh",
+        script_body=_HOOK_ENV_WRITE,
+        note="시뮬레이터 시연에서 즉시 차단으로 확인됩니다.",
+    ),
+    HookCatalogEntry(
+        key="git-dir-protect",
+        display_name=".git/ 저장소 내부 보호",
+        purpose=".git 폴더 내부 파일 수정을 막습니다(.gitignore 등 일반 파일은 허용).",
+        protects="git 명령을 우회한 저장소 무결성 훼손 방지",
+        matcher_tool="Write|Edit|MultiEdit",
+        action="deny",
+        path_glob="**/.git/**",
+        script_name="protect-git-dir.sh",
+        script_body=_HOOK_GIT_DIR,
+    ),
+    HookCatalogEntry(
+        key="ssh-key-protect",
+        display_name="~/.ssh 키·설정 보호",
+        purpose="~/.ssh 안의 개인키·설정 파일 쓰기를 막습니다.",
+        protects="SSH 개인키·known_hosts·config 등 자격증명 보호",
+        matcher_tool="Write|Edit|MultiEdit",
+        action="deny",
+        path_glob="**/.ssh/**",
+        script_name="protect-ssh-keys.sh",
+        script_body=_HOOK_SSH_KEY,
+    ),
+    HookCatalogEntry(
+        key="rm-rf-warn",
+        display_name="rm -rf 위험 삭제 경고",
+        purpose="재귀·강제 삭제 명령에 경고를 띄웁니다(차단은 하지 않음).",
+        protects="비가역 대량 삭제 전 재고 유도",
+        matcher_tool="Bash",
+        action="warn",
+        path_glob=None,
+        script_name="warn-rm-rf.sh",
+        script_body=_HOOK_RM_RF,
+        note="경고만 하고 진행합니다. 완전 차단은 권한 규칙 Bash(rm:*) 금지로 설정하세요.",
+    ),
+    HookCatalogEntry(
+        key="force-push-warn",
+        display_name="git 강제 푸시 경고",
+        purpose="git push --force / -f 에 경고를 띄웁니다(차단은 하지 않음).",
+        protects="원격 히스토리 덮어쓰기 사고 예방",
+        matcher_tool="Bash",
+        action="warn",
+        path_glob=None,
+        script_name="warn-force-push.sh",
+        script_body=_HOOK_FORCE_PUSH,
+        note="경고만 하고 진행합니다. 완전 차단은 권한 규칙 Bash(git push --force:*) 금지로 설정하세요.",
+    ),
+    HookCatalogEntry(
+        key="curl-pipe-sh-warn",
+        display_name="curl | sh 원격 실행 경고",
+        purpose="내려받은 스크립트를 곧바로 셸에 파이프하는 명령에 경고합니다.",
+        protects="검증 없는 원격 코드 실행 위험 인지",
+        matcher_tool="Bash",
+        action="warn",
+        path_glob=None,
+        script_name="warn-curl-pipe-sh.sh",
+        script_body=_HOOK_CURL_PIPE,
+        note="경고만 하고 진행합니다.",
+    ),
+    HookCatalogEntry(
+        key="sudo-warn",
+        display_name="sudo 권한 상승 경고",
+        purpose="sudo 명령에 경고를 띄웁니다(차단은 하지 않음).",
+        protects="시스템 전역 변경 전 주의 환기",
+        matcher_tool="Bash",
+        action="warn",
+        path_glob=None,
+        script_name="warn-sudo.sh",
+        script_body=_HOOK_SUDO,
+        note="경고만 하고 진행합니다.",
+    ),
+)
+
+_HOOK_BY_KEY: dict[str, HookCatalogEntry] = {e.key: e for e in HOOK_CATALOG}
+
+
+def hook_catalog_entry(key: str) -> HookCatalogEntry | None:
+    return _HOOK_BY_KEY.get(key)
+
+
+def build_hook(entry: HookCatalogEntry, layer: str = "guardrails") -> Hook:
+    """훅 카탈로그 항목 → 검증된 Hook(factory 기본값 + 카탈로그 값 채움)."""
+    base = create_component("hook", layer)
+    return base.model_copy(
+        update={
+            "title": entry.display_name,
+            "event": entry.event,
+            "matcher_tool": entry.matcher_tool,
+            "action": entry.action,
+            "path_glob": entry.path_glob,
+            "script_name": entry.script_name,
+            "script_body": entry.script_body,
         }
     )
