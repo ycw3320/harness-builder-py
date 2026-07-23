@@ -579,6 +579,27 @@ class BuilderWindow(QMainWindow):
         sect.setObjectName("h1")
         sect.setToolTip(mat.detail)  # 산식 공개 — 게임화 역효과 통제
         sc.addWidget(sect)
+        # 이 레벨이 실제로 뜻하는 것(평문) — '검증됨'이 과장으로 읽히던 것 해소.
+        meaning = QLabel(mat.meaning)
+        meaning.setObjectName("muted")
+        meaning.setWordWrap(True)
+        sc.addWidget(meaning)
+        # 지금 구체적으로 막는/확인하는 것 — 추상 라벨을 실물로.
+        if mat.covered:
+            cov = QLabel("지금 막는 것: " + " · ".join(mat.covered))
+            cov.setObjectName("faint")
+            cov.setWordWrap(True)
+            sc.addWidget(cov)
+        # 예시 프리셋만으로 도달한 경우 — '내가 채운 것'과 구분(사용자 혼란 해소).
+        enabled_now = [c for c in self.state.ir.components if c.enabled]
+        from_examples = bool(enabled_now) and all(c.id in self._example_ids for c in enabled_now)
+        if from_examples and mat.level >= 3:
+            ex = QLabel(
+                "지금은 예시 프리셋 기준이에요 — 내 프로젝트에 맞게 바꾸면 진짜 내 하네스가 됩니다."
+            )
+            ex.setObjectName("lintWarn")
+            ex.setWordWrap(True)
+            sc.addWidget(ex)
         meter = QProgressBar()
         meter.setObjectName("meter")
         meter.setRange(0, 100)
@@ -586,6 +607,12 @@ class BuilderWindow(QMainWindow):
         meter.setTextVisible(False)
         meter.setFixedHeight(8)
         sc.addWidget(meter)
+        # '검증됨'의 한계(Lv4에서만) — 완성이 아니라 기본 안전 통과임을 명시.
+        if mat.caveat:
+            cav = QLabel(mat.caveat)
+            cav.setObjectName("faint")
+            cav.setWordWrap(True)
+            sc.addWidget(cav)
         # 단 하나의 다음 행동 버튼 — 결정론(오류 해결 > 성숙도 다음 단계 > 빈 영역 > 내보내기)
         if act.action == "export":
             act_btn = make_btn(

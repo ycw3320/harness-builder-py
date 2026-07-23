@@ -50,3 +50,15 @@ def test_label_and_detail_exposed():
     assert m.label.startswith("Lv4")
     assert "산식" in m.detail  # 산식 공개(게임화 역효과 통제)
     assert m.next_hint is None
+
+
+def test_lv4_clarifies_meaning_and_caveat():
+    """'검증됨' 과장 오독 방지 — 의미·구체 커버·한계 노출(사용자 혼란 해소)."""
+    m = vm.maturity(BuilderState("demo", preset="safety-first"))
+    assert m.meaning  # 이 레벨이 뜻하는 평문
+    assert m.caveat and "완성이 아니라" in m.caveat  # Lv4 한계 명시
+    # 구체적으로 막는 것에 .env·강제 push 가 포함
+    joined = " ".join(m.covered)
+    assert ".env" in joined and "push" in joined
+    # 하위 레벨은 caveat 없음(검증됨에서만)
+    assert vm.maturity(BuilderState("demo", preset="minimal")).caveat == ""

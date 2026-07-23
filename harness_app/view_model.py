@@ -130,6 +130,9 @@ class MaturityVM:
     label: str  # 예: "Lv3 강제"
     detail: str  # 산식 공개(툴팁)
     next_hint: str | None  # 다음 레벨로 가는 최소 행동(없으면 최고 레벨)
+    meaning: str = ""  # 이 레벨이 실제로 뜻하는 것(한 줄 평문)
+    covered: tuple[str, ...] = ()  # 지금 하네스가 막는/확인하는 시나리오(구체 표시)
+    caveat: str = ""  # '검증됨'의 한계(Lv4에서만) — 과장 오독 방지
 
 
 # 완성도 집계: 핵심 계층(항상 채워야 함) + 선택 계층(프로젝트별 — 비어 있으면 N/A로 분모 제외).
@@ -435,8 +438,21 @@ def layer_intro(state: BuilderState) -> dict[str, str]:
 
 
 _MATURITY_NAMES = {0: "무방비", 1: "약속", 2: "규칙", 3: "강제", 4: "검증됨"}
+_MATURITY_MEANING = {
+    0: "아직 아무 보호도 없어요.",
+    1: "지침(약속)만 있어요 — 어겨도 막지는 못합니다.",
+    2: "규칙은 있지만, 실행 전 자동 차단은 아직이에요.",
+    3: "위험한 작업을 실행 전에 자동으로 막아요.",
+    4: "대표 위험을 실제로 막고 검사도 깨끗해요.",
+}
+# 성숙도는 '결정방식(직접/추천/자동)'·'입력량'이 아니라 lint+시뮬 결과의 함수 — 오독 방지 문구.
+_MATURITY_CAVEAT = (
+    "'검증됨'은 완성이 아니라 기본 안전 기준(.env 유출·되돌릴 수 없는 삭제·강제 push) 통과예요. "
+    "내 프로젝트 고유의 위험·팀 규칙은 직접 더 추가해야 진짜 완성입니다."
+)
 _MATURITY_DETAIL = (
-    "산식(결정론): Lv1=지침 존재 · Lv2=권한/정책 규칙 존재 · Lv3=차단 hook(도구 실행 전+금지) 존재 · "
+    "산식(결정론, 입력량·결정방식 무관): Lv1=지침 존재 · Lv2=권한/정책 규칙 존재 · "
+    "Lv3=차단 hook(도구 실행 전+금지) 존재 · "
     "Lv4=오류 0 + 보안 경고 0 + 차단 시연 ≥1 + 핵심 시나리오(.env 차단·강제 push 확인) 커버"
 )
 
@@ -449,6 +465,7 @@ def maturity(state: BuilderState) -> MaturityVM:
         c.kind == "hook" and c.event == "PreToolUse" and c.action == "deny" for c in enabled
     )
 
+    covered_labels: tuple[str, ...] = ()
     if not enabled:
         level, hint = 0, "컨텍스트 영역에서 프로젝트 개요 한 줄부터 시작하세요"
     elif not has_rule and not has_block_hook:
@@ -460,6 +477,10 @@ def maturity(state: BuilderState) -> MaturityVM:
         errors = [f for f in findings if f["level"] == "error"]
         sec_warns = [f for f in findings if f["code"].startswith("sec-")]
         compare = sim_compare_ir(state.ir)
+        # 지금 하네스가 '무언가 하는'(차단·확인) 시나리오 = 구체적 커버 목록(상태 카드 표시).
+        covered_labels = tuple(
+            r.label.replace(" 시도", "") for r in compare if r.after_raw != "allowed"
+        )
         by_label = {r.label: r for r in compare}
         env = by_label.get(".env 파일에 쓰기 시도")
         push = by_label.get("강제 push 시도")
@@ -484,6 +505,9 @@ def maturity(state: BuilderState) -> MaturityVM:
         label=f"Lv{level} {_MATURITY_NAMES[level]}",
         detail=_MATURITY_DETAIL,
         next_hint=hint,
+        meaning=_MATURITY_MEANING[level],
+        covered=covered_labels,
+        caveat=_MATURITY_CAVEAT if level == 4 else "",
     )
 
 
