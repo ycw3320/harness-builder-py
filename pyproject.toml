@@ -2,6 +2,7 @@
 name = "harness-builder-py"
 version = "0.1.0"
 description = "버클(Buckle) — Claude Code 하네스 구성 데스크톱 앱 (Python)"
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.10",

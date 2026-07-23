@@ -76,6 +76,13 @@ python -m pytest
 
 설계·규칙·결정은 [`docs/00_INDEX.md`](docs/00_INDEX.md)에서 시작. 비가역 결정은 [`docs/DECISIONS/`](docs/DECISIONS/)(ADR-0001~0011).
 
+## 라이선스
+
+- **코드**: [MIT](LICENSE) © 2026 ycw3320. 자유롭게 사용·수정·재배포 가능.
+- **번들 폰트**: `harness_app/qt_shell/fonts/`의 Pretendard 는 코드와 **별도로** SIL Open Font
+  License 1.1(동봉 `OFL.txt`)을 따릅니다 — MIT 대상 아님.
+- **의존성**: PySide6 는 LGPL-3.0. Qt 자체를 수정·재배포하지 않고 라이브러리로 사용합니다.
+
 ## 로드맵
 
 - **PM1** ✅ 코어 포팅 + 골든 바이트-동일 게이트
