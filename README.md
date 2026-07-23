@@ -1,5 +1,9 @@
 # 버클 (Buckle)
 
+![license](https://img.shields.io/badge/license-MIT-green.svg)
+![python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
+![status](https://img.shields.io/badge/status-WIP-orange.svg)
+
 > Claude Code 하네스 빌더 — Python 데스크톱
 >
 > 🚧 **개발 중(WIP)** — 활발히 개선 중인 개인 프로젝트입니다. 일부 기능(라이브 관측 등)은 실험 단계이며 API·UX가 바뀔 수 있습니다.
