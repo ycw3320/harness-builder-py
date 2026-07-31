@@ -17,6 +17,12 @@ HookEvent = Literal["PreToolUse", "PostToolUse", "SessionStart", "Stop"]
 
 _CFG = ConfigDict(populate_by_name=True, extra="forbid")
 
+# 훅 스크립트로 코드젠되는 값(경로 glob)은 제어문자를 담을 수 없다. 담기면 생성 스크립트의
+# 줄 경계가 무너져 임의 명령이 실행된다(적대 검증 2026-07-24 확정 RCE — 공유 .harness.json
+# 하나로 성립했고 `bash -n` 문법 검사도 통과했다). 여기서 막으면 오염된 파일은 **로드 자체가
+# 거부**된다(코드젠 쪽 제거는 2겹째 방어).
+_SAFE_GLOB = Annotated[str, Field(pattern=r"^[^\x00-\x1f\x7f]*$", max_length=200)]
+
 
 class Intent(BaseModel):
     model_config = _CFG
@@ -60,7 +66,7 @@ class Hook(_Base):
     kind: Literal["hook"] = "hook"
     event: HookEvent
     matcher_tool: str = Field(alias="matcherTool")
-    path_glob: str | None = Field(default=None, alias="pathGlob")
+    path_glob: _SAFE_GLOB | None = Field(default=None, alias="pathGlob")
     action: Literal["deny", "allow", "warn"]
     script_name: str = Field(alias="scriptName")
     script_body: str = Field(alias="scriptBody")

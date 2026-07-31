@@ -7,7 +7,9 @@ import re
 from ..ir.schema import HarnessIR, by_kind
 from ..lint.lint import parse_pattern
 
-_GLOB_ESCAPE = re.compile(r"([.+^${}()|\[\]\\])")
+# `?` 를 빠뜨리면 glob 의 '한 글자'가 정규식의 '직전 문자 0~1회'로 새어 나가 의도보다 넓게
+# 매칭된다(적대 검증 확정). glob 의 `?`·`*`·`**` 만 와일드카드로 살리고 나머지는 리터럴화.
+_GLOB_ESCAPE = re.compile(r"([.+^${}()|\[\]\\?])")
 # 치환 중간 자리표시자 — `**/`→`(.*/)?` 를 먼저 넣고 그 뒤 `*`→`[^/]*` 를 돌리면 방금 삽입한
 # `.*` 의 `*` 까지 오염돼 `**` 가 "정확히 한 단계"로 축소됐다(3-A 실측 결함: sub/dir/.env 가
 # 시뮬=통과 / 실제 bash 훅=차단). 자리표시자를 거쳐 오염을 차단한다.
@@ -29,8 +31,13 @@ def glob_to_pattern(glob: str) -> str:
 
 
 def glob_to_regexp(glob: str) -> re.Pattern:
-    """glob → 정규식 (`**` 경로 구분 포함, `*` 미포함)."""
-    return re.compile(glob_to_pattern(glob))
+    """glob → 정규식 (`**` 경로 구분 포함, `*` 미포함).
+
+    IGNORECASE: Windows·macOS 기본 파일시스템은 대소문자를 구분하지 않아 `.ENV` 쓰기가
+    실제로는 `.env` 를 덮어쓴다. 구분해서 판정하면 한 글자로 보호가 뚫리는데 화면은 '안전'으로
+    보인다(적대 검증 확정). 생성 스크립트도 `grep -qiE` 라 양쪽 판정이 일치한다.
+    """
+    return re.compile(glob_to_pattern(glob), re.IGNORECASE)
 
 
 def _permission_matches(pattern: str, action: dict) -> bool:

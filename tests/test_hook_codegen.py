@@ -128,6 +128,108 @@ def test_user_body_still_receives_stdin(tmp_path):
     assert _run(script, "secret.txt", tmp_path) == 2  # 본문 판정이 살아있다
 
 
+# --- 적대 검증(2026-07-24)이 확정한 공격 벡터 회귀 --------------------------------
+#
+# 아래는 전부 실제로 재현됐던 결함이다. `bash -n` 문법 검사는 이 중 어느 것도 잡지 못했다.
+
+
+def _hook(path_glob: str, body: str = "#!/usr/bin/env bash\ninput=$(cat)\nexit 0\n"):
+    return create_component("hook", "guardrails").model_copy(
+        update={"action": "deny", "path_glob": path_glob, "script_body": body}
+    )
+
+
+def test_path_glob_control_chars_rejected_at_schema():
+    """1겹: 오염된 path_glob 은 로드 자체가 거부된다(공유 .harness.json 공급망 차단)."""
+    from pydantic import ValidationError
+
+    from harness_core.ir.schema import Hook
+
+    with pytest.raises(ValidationError):
+        Hook(
+            id="x",
+            layer="guardrails",
+            title="t",
+            involvement="auto",
+            enabled=True,
+            event="PreToolUse",
+            matcherTool="Write",
+            pathGlob="**/.env*\ntouch OWNED\nexit 0\n# ",
+            action="deny",
+            scriptName="a.sh",
+            scriptBody="#!/usr/bin/env bash\nexit 0",
+        )
+
+
+def test_codegen_rejects_control_chars():
+    """2겹: model_copy 는 재검증을 안 하므로 코드젠에서도 막는다 — 조용히 약화 금지."""
+    with pytest.raises(ValueError):
+        with_guard(_hook("**/.env*\ntouch OWNED\nexit 0\n# "))
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash 미존재")
+def test_quote_in_glob_does_not_break_script(tmp_path):
+    """큰따옴표가 든 glob 이 스크립트 문법을 깨 전면 차단/전면 통과가 되면 안 된다."""
+    script = with_guard(_hook('**/say"hi*'))
+    assert _run(script, "src/app.js", tmp_path) == 0
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash 미존재")
+@pytest.mark.parametrize("path", [".ENV", "sub/.Env", "SRC/.EnV.local"])
+def test_case_insensitive_paths_blocked(path, tmp_path):
+    """Windows·macOS 는 대소문자를 구분하지 않아 `.ENV` 쓰기가 실제 `.env` 를 덮어쓴다."""
+    ir = safety_first_preset("demo")
+    assert _run(_script_of(ir, enforce=True), path, tmp_path) == 2
+    # 시뮬도 같은 판정이어야 정합이 유지된다
+    assert simulate(ir, {"tool": "Write", "path": path, "label": path})["outcome"] == (
+        "blocked-by-hook"
+    )
+
+
+def test_guard_mark_mention_does_not_skip_guard():
+    """본문이 마커 문자열을 '언급'만 해도 가드가 생략되면 화면=차단/산출물=무방비."""
+    body = '#!/usr/bin/env bash\necho "# [버클 자동 생성 가드] 형식 설명"\nexit 0\n'
+    assert GUARD_MARK in body  # 부분문자열로는 이미 존재
+    assert "grep -qiE" in with_guard(_hook("**/.env*", body))  # 그래도 가드는 붙는다
+
+
+def test_body_shebang_is_not_promoted():
+    """가드는 bash 전용 문법을 쓴다 — 본문의 `#!/bin/sh` 를 승격하면 dash 에서 즉사."""
+    out = with_guard(_hook("**/.env*", "#!/bin/sh\ninput=$(cat)\nexit 0\n"))
+    assert out.splitlines()[0] == "#!/usr/bin/env bash"
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash 미존재")
+def test_notebook_path_key_is_also_checked(tmp_path):
+    """matcher(Write|Edit)에는 걸리는 NotebookEdit 은 경로 키가 notebook_path 다."""
+    script = _script_of(safety_first_preset("demo"), enforce=True)
+    p = tmp_path / "h.sh"
+    p.write_text(script, encoding="utf-8", newline="\n")
+    payload = {"tool_name": "NotebookEdit", "tool_input": {"notebook_path": ".env"}}
+    proc = subprocess.run(
+        [_BASH, str(p)], input=json.dumps(payload).encode("utf-8"), capture_output=True
+    )
+    assert proc.returncode == 2
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash 미존재")
+@pytest.mark.parametrize(
+    "path,blocked",
+    [('dir"x/.env', True), ('my"docs/readme.md', False)],
+)
+def test_json_escaped_quotes_in_path(path, blocked, tmp_path):
+    """경로 안의 따옴표에서 추출이 잘리면 과차단과 우회가 동시에 생긴다."""
+    code = _run(_script_of(safety_first_preset("demo"), enforce=True), path, tmp_path)
+    assert (code == 2) is blocked
+
+
+def test_glob_question_mark_is_literalized():
+    """glob 의 `?`(한 글자)가 정규식 `?`(0~1회)로 새면 의도보다 넓게 매칭된다."""
+    from harness_core.sim.simulate import glob_to_pattern
+
+    assert glob_to_pattern("**/secrets?.json") == r"^(.*/)?secrets\?\.json$"
+
+
 @pytest.mark.skipif(_BASH is None, reason="bash 미존재")
 def test_generated_scripts_are_syntactically_valid(tmp_path):
     """전 프리셋 x enforce → bash -n 문법 검사(생성 코드가 깨지면 훅 전체가 죽는다)."""
