@@ -69,6 +69,7 @@ def show_export_done(
     n_unedited_examples: int,
     maturity_label: str = "",
     runtime=None,
+    on_preview=None,
 ) -> None:
     """PM6-S6: 생성 후 '다음 단계' — 결과물을 손에 쥐고도 작동을 못 보던 갭을 닫는다.
 
@@ -127,6 +128,16 @@ def show_export_done(
         rt.setObjectName("lintErr" if runtime.blocking_affected else "lintWarn")
         rt.setWordWrap(True)
         v.addWidget(rt)
+    # 1-D 여정 완결: 여기서 끝나지 않고 '확인 → 반복 수정 → 공유'로 이어지는 학습 루프를 안내.
+    loop = QLabel(
+        "그다음은 이렇게 이어져요\n"
+        "· 확인 — 위험한 작업을 시켜 보고 실제로 막히는지 봅니다(라이브 관측을 켜면 그대로 보여요).\n"
+        "· 수정 — 막히지 않거나 과하게 막히면 이 앱으로 돌아와 규칙을 고치고 다시 생성하세요.\n"
+        "· 공유 — [하네스 파일로 저장]으로 .harness.json 하나만 넘기면 팀이 같은 구성을 씁니다."
+    )
+    loop.setObjectName("faint")
+    loop.setWordWrap(True)
+    v.addWidget(loop)
     row = QHBoxLayout()
     # pushd: cmd 에서 드라이브 전환 포함(cd 는 /d 없인 드라이브 미전환), PowerShell 은
     # Push-Location 별칭으로 동일. 트레일링 개행 = 마지막 명령까지 자동 실행.
@@ -142,6 +153,10 @@ def show_export_done(
         "폴더 열기", "addBtn", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(dest))
     )
     row.addWidget(openb)
+    if on_preview is not None:  # 1-D: 방금 만든 파일의 실제 내용을 그 자리에서 확인
+        row.addWidget(
+            make_btn("만든 파일 보기", "addBtn", on_preview, tip="생성된 파일의 실제 내용을 봅니다")
+        )
     row.addStretch(1)
     close = make_btn("닫기", "primaryBtn", dlg.accept)
     row.addWidget(close)

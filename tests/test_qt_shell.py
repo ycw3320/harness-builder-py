@@ -401,6 +401,55 @@ def test_hook_catalog_dialog_lists_all_and_picks(qapp, temp_settings):
     dlg.close()
 
 
+def test_export_target_dialog_sets_scaffold(qapp, temp_settings):
+    """1-D: 생성 시점에 용도를 물어 scaffold 를 정한다(기존 레포 원클릭 적용 진입점)."""
+    from harness_app.qt_shell.export_target_dialog import ExportTargetDialog
+
+    win = _make_window(qapp, temp_settings)
+    dlg = ExportTargetDialog(win, "demo", "minimal")
+    assert "demo/" in dlg._result.text()  # 새 프로젝트 = 하위 폴더 생김을 미리 알림
+    dlg._pick("harness-only")
+    assert "바로" in dlg._result.text()  # 기존 프로젝트 = 그 폴더에 바로
+    dlg._confirm()
+    assert dlg.result_scaffold == "harness-only"
+    dlg.close()
+
+
+def test_export_applies_picked_scaffold_to_existing_repo(
+    qapp, temp_settings, tmp_path, monkeypatch
+):
+    """harness-only 선택 시 하위 폴더 없이 고른 폴더에 바로 .claude/ 가 생성된다."""
+    from harness_app.qt_shell import app as appmod
+
+    win = _make_window(qapp, temp_settings)
+    repo = tmp_path / "existing-repo"
+    repo.mkdir()
+
+    monkeypatch.setattr(
+        appmod.QFileDialog, "getExistingDirectory", staticmethod(lambda *a, **k: str(repo))
+    )
+
+    class _Picker:  # 다이얼로그 모킹 — '이미 있는 프로젝트에 적용' 선택
+        result_scaffold = "harness-only"
+
+        def __init__(self, *a, **k):
+            pass
+
+        def exec(self):
+            return 1
+
+    monkeypatch.setattr(
+        "harness_app.qt_shell.export_target_dialog.ExportTargetDialog", _Picker, raising=True
+    )
+    win._show_export_done = lambda *a, **k: None  # 완료 다이얼로그 모킹
+    win._on_export()
+    qapp.processEvents()
+
+    assert (repo / ".claude" / "settings.json").exists()  # 고른 폴더에 바로
+    assert not (repo / "demo").exists()  # 하위 프로젝트 폴더 없음
+    assert win.state.scaffold == "harness-only"
+
+
 def test_hook_catalog_add_appends_verified_hook(qapp, temp_settings):
     """_add_hook 배선: build_hook 산출이 IR 에 프리빌트로 주입 + 스크립트/메타 보존."""
     from harness_app.catalog import build_hook, hook_catalog_entry

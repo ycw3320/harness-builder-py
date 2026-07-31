@@ -782,9 +782,10 @@ class BuilderWindow(QMainWindow):
         scafrow.addWidget(scaf_lbl)
         combo = QComboBox()
         # (표시 라벨, 실제 값) — raw 값 노출이 비직관적이던 것 교정
+        # 1-D: 생성 시점 다이얼로그와 같은 말로 — 파일 구성이 아니라 '용도'로 고르게 한다.
         for label, val in (
-            ("최소 스캐폴드 — README·.gitignore 포함", "minimal"),
-            ("하네스만 — .claude/ 와 CLAUDE.md 만", "harness-only"),
+            ("새 프로젝트 만들기 — 폴더+README·.gitignore 포함", "minimal"),
+            ("이미 있는 프로젝트에 적용 — .claude/ 와 CLAUDE.md 만", "harness-only"),
         ):
             combo.addItem(label, val)
         combo.setCurrentIndex(0 if self.state.scaffold == "minimal" else 1)
@@ -951,7 +952,20 @@ class BuilderWindow(QMainWindow):
         return lbl
 
     def _on_export(self) -> None:
-        dest = QFileDialog.getExistingDirectory(self, "하네스를 생성할 폴더 선택")
+        # 1-D: 폴더를 묻기 전에 '용도'를 먼저 묻는다 — 기존 레포 원클릭 적용의 진입점.
+        # (이전엔 우패널 '생성 방식' 콤보를 미리 이해해야만 기존 레포에 바로 넣을 수 있었다.)
+        from .export_target_dialog import ExportTargetDialog  # 지연 import
+
+        picker = ExportTargetDialog(self, self.state.ir.meta.project_name, self.state.scaffold)
+        if not picker.exec() or picker.result_scaffold is None:
+            return
+        self.state.set_scaffold(picker.result_scaffold)
+        title = (
+            "새 프로젝트를 만들 상위 폴더 선택"
+            if picker.result_scaffold == "minimal"
+            else "하네스를 적용할 프로젝트 폴더 선택"
+        )
+        dest = QFileDialog.getExistingDirectory(self, title)
         if not dest:
             return
         tree = assemble_project(self.state.ir, self.state.scaffold)
@@ -971,6 +985,7 @@ class BuilderWindow(QMainWindow):
             n_ex,
             maturity_label=vm.maturity(self.state).label,
             runtime=check_hook_runtimes(self.state.ir),
+            on_preview=self._open_preview,  # 1-D: 만든 파일 내용을 그 자리에서 확인
         )
 
     # PM7-S2: 통합 .harness.json 저장/열기 ---
