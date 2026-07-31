@@ -63,9 +63,18 @@ def show_welcome(parent) -> None:
 
 
 def show_export_done(
-    parent, dest: str, report, n_unedited_examples: int, maturity_label: str = ""
+    parent,
+    dest: str,
+    report,
+    n_unedited_examples: int,
+    maturity_label: str = "",
+    runtime=None,
 ) -> None:
-    """PM6-S6: 생성 후 '다음 단계' — 결과물을 손에 쥐고도 작동을 못 보던 갭을 닫는다."""
+    """PM6-S6: 생성 후 '다음 단계' — 결과물을 손에 쥐고도 작동을 못 보던 갭을 닫는다.
+
+    1-C: runtime(HookRuntimeVM)이 실행기 부재를 알리면 ③ 문구를 단정에서 조건부로 강등한다
+    (발견 B — bash 없는 Windows 에서 '실제로 적용됩니다'는 거짓 안전).
+    """
     dlg = QDialog(parent)
     dlg.setWindowTitle("하네스 생성 완료 — 다음 단계")
     dlg.setMinimumWidth(520)
@@ -90,15 +99,34 @@ def show_export_done(
         warn.setObjectName("lintWarn")
         warn.setWordWrap(True)
         v.addWidget(warn)
+    # ③ 문구: 훅 실행기가 이 PC 에 있을 때만 단정한다(1-C).
+    missing_runtime = runtime is not None and not runtime.ok
+    third = (
+        "③ 이 PC 에는 훅 실행기가 없어, 방금 본 차단이 지금 상태로는 적용되지 않습니다"
+        " — 아래 안내를 먼저 확인하세요."
+        if missing_runtime
+        else "③ 방금 시뮬레이터에서 본 차단(.env·강제 push)이 실제로 적용됩니다."
+    )
     steps = QLabel(
         "① 이 폴더를 프로젝트 루트에 두세요(이미 프로젝트라면 그대로).\n"
         "② 그 폴더에서 Claude Code를 실행하세요 — 터미널에서 claude\n"
         "   터미널이 처음이라면: [폴더 열기] 후 폴더 창 주소칸에 cmd 입력 → 엔터 → 붙여넣기.\n"
-        "③ 방금 시뮬레이터에서 본 차단(.env·강제 push)이 실제로 적용됩니다."
+        f"{third}"
     )
     steps.setObjectName("muted")
     steps.setWordWrap(True)
     v.addWidget(steps)
+    if missing_runtime:
+        rt = QLabel(
+            f"훅 실행기 없음: {runtime.runtime_names}\n"
+            f"영향받는 훅 {len(runtime.affected_titles)}개 — "
+            + ", ".join(runtime.affected_titles[:3])
+            + ("…" if len(runtime.affected_titles) > 3 else "")
+            + ("\n" + runtime.notes[0] if runtime.notes else "")
+        )
+        rt.setObjectName("lintErr" if runtime.blocking_affected else "lintWarn")
+        rt.setWordWrap(True)
+        v.addWidget(rt)
     row = QHBoxLayout()
     # pushd: cmd 에서 드라이브 전환 포함(cd 는 /d 없인 드라이브 미전환), PowerShell 은
     # Push-Location 별칭으로 동일. 트레일링 개행 = 마지막 명령까지 자동 실행.

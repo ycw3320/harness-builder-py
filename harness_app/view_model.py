@@ -16,6 +16,7 @@ from harness_core.lint.lint import lint_ir
 from harness_core.sim.simulate import default_scenarios, simulate
 
 from .guides import guidance_for, involvement_meta, layer_intros, layer_meta, layer_order
+from .runtime_check import check_hook_runtimes
 from .state import BuilderState
 
 # 결정방식(involvement) 콤보 옵션 — (라벨, 키)
@@ -133,6 +134,9 @@ class MaturityVM:
     meaning: str = ""  # 이 레벨이 실제로 뜻하는 것(한 줄 평문)
     covered: tuple[str, ...] = ()  # 지금 하네스가 막는/확인하는 시나리오(구체 표시)
     caveat: str = ""  # '검증됨'의 한계(Lv4에서만) — 과장 오독 방지
+    # 1-C: 이 PC 에 훅 실행기(bash 등)가 없어 Lv4 를 보류했는가(거짓 안전 방지).
+    runtime_blocked: bool = False
+    runtime_note: str = ""  # 보류 사유(사람 말) — 상태 카드에 경고로 표시
 
 
 # 완성도 집계: 핵심 계층(항상 채워야 함) + 선택 계층(프로젝트별 — 비어 있으면 N/A로 분모 제외).
@@ -466,6 +470,8 @@ def maturity(state: BuilderState) -> MaturityVM:
     )
 
     covered_labels: tuple[str, ...] = ()
+    runtime_blocked = False
+    runtime_note = ""
     if not enabled:
         level, hint = 0, "컨텍스트 영역에서 프로젝트 개요 한 줄부터 시작하세요"
     elif not has_rule and not has_block_hook:
@@ -491,11 +497,23 @@ def maturity(state: BuilderState) -> MaturityVM:
             and push.after_raw in ("ask", "blocked-by-hook", "blocked-by-permission")
         )
         changed = any(r.changed for r in compare)
-        if not errors and not sec_warns and changed and covered:
+        # 1-C 크로스플랫폼 precheck(발견 B): 훅 스크립트의 실행기(bash 등)가 이 PC 에 없으면
+        # 훅은 조용히 미실행된다 — 시뮬이 '차단'이라 해도 실제로는 안 막힌다. 그 상태로 Lv4
+        # '검증됨'을 주면 도구가 없는 안전을 있다고 말하게 되므로 Lv3 로 보류한다.
+        rt = check_hook_runtimes(state.ir)
+        if rt.blocking_affected:
+            runtime_blocked = True
+            runtime_note = (
+                f"이 PC 에 {rt.runtime_names} 이(가) 없어 차단 훅이 실행되지 않습니다 — "
+                "지금 상태로는 실제로 막히지 않아요. " + (rt.notes[0] if rt.notes else "")
+            ).strip()
+        if not errors and not sec_warns and changed and covered and not runtime_blocked:
             level, hint = 4, None
         else:
             level = 3
-            if errors or sec_warns:
+            if runtime_blocked:
+                hint = f"{rt.runtime_names} 설치 후 다시 확인하세요(없으면 차단 훅이 실행되지 않음)"
+            elif errors or sec_warns:
                 hint = "정합성 오류·보안 경고를 해결하세요(우측 검사 결과 참조)"
             else:
                 hint = ".env 쓰기 차단과 강제 push 확인 규칙을 켜세요(핵심 시나리오 커버)"
@@ -508,6 +526,8 @@ def maturity(state: BuilderState) -> MaturityVM:
         meaning=_MATURITY_MEANING[level],
         covered=covered_labels,
         caveat=_MATURITY_CAVEAT if level == 4 else "",
+        runtime_blocked=runtime_blocked,
+        runtime_note=runtime_note,
     )
 
 

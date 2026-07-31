@@ -641,6 +641,12 @@ class BuilderWindow(QMainWindow):
         meter.setTextVisible(False)
         meter.setFixedHeight(8)
         sc.addWidget(meter)
+        # 1-C: 이 PC 에 훅 실행기가 없어 차단이 실제로는 동작하지 않는 상태(발견 B 거짓 안전).
+        if mat.runtime_blocked:
+            rtw = QLabel(mat.runtime_note)
+            rtw.setObjectName("lintErr")
+            rtw.setWordWrap(True)
+            sc.addWidget(rtw)
         # '검증됨'의 한계(Lv4에서만) — 완성이 아니라 기본 안전 통과임을 명시.
         if mat.caveat:
             cav = QLabel(mat.caveat)
@@ -955,7 +961,17 @@ class BuilderWindow(QMainWindow):
     def _show_export_done(self, dest: str, report) -> None:
         # 미편집 '예시' 수는 윈도 상태(_example_ids)로만 계산 가능 — 여기서 세어 인자로 전달(R#8).
         n_ex = sum(1 for c in self.state.ir.components if c.enabled and c.id in self._example_ids)
-        show_export_done(self, dest, report, n_ex, maturity_label=vm.maturity(self.state).label)
+        # 1-C: 이 PC 에 훅 실행기(bash 등)가 없으면 '실제로 적용됩니다' 단정을 강등(거짓 안전 방지).
+        from ..runtime_check import check_hook_runtimes
+
+        show_export_done(
+            self,
+            dest,
+            report,
+            n_ex,
+            maturity_label=vm.maturity(self.state).label,
+            runtime=check_hook_runtimes(self.state.ir),
+        )
 
     # PM7-S2: 통합 .harness.json 저장/열기 ---
     def _on_save_file(self) -> None:
