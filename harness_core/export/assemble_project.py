@@ -16,7 +16,14 @@ from .scaffold_templates import (
 )
 
 
-def assemble_project(ir: HarnessIR, scaffold: str = "minimal") -> list[VirtualFile]:
+def assemble_project(
+    ir: HarnessIR, scaffold: str = "minimal", enforce_hooks: bool = False
+) -> list[VirtualFile]:
+    """IR → 폴더 트리. enforce_hooks 는 export_ir 로 그대로 전달(3-A opt-in).
+
+    기본값 False = 기존 산출 바이트 유지(ADR-0012 frozen 골든 보호). 앱은 True 로 호출해
+    "시뮬에서 막힌 것 = 산출물에서 막힘" 을 성립시킨다.
+    """
     project_name = ir.meta.project_name or "my-project"
     minimal = scaffold == "minimal"
     prefix = f"{project_name}/" if minimal else ""
@@ -26,7 +33,7 @@ def assemble_project(ir: HarnessIR, scaffold: str = "minimal") -> list[VirtualFi
         VirtualFile("_APPLY/APPLY.md", apply_md_template(project_name, scaffold))
     ]
 
-    for f in export_ir(ir):
+    for f in export_ir(ir, enforce_hooks=enforce_hooks):
         if f.path == "_global/CLAUDE.md":
             apply_files.append(VirtualFile("_APPLY/global-CLAUDE.md", f.content))
             continue

@@ -171,7 +171,7 @@ class BuilderWindow(QMainWindow):
         self.state.load_ir(ir)
         self._enter_builder()
         if dest:  # 폴더를 골랐다면 바로 생성까지(최소 입력의 완결)
-            tree = assemble_project(self.state.ir, self.state.scaffold)
+            tree = assemble_project(self.state.ir, self.state.scaffold, enforce_hooks=True)
             report = write_tree(tree, Path(dest), strategy=MergeStrategy.SKIP_EXISTING)
             self._show_export_done(dest, report)
 
@@ -968,7 +968,7 @@ class BuilderWindow(QMainWindow):
         dest = QFileDialog.getExistingDirectory(self, title)
         if not dest:
             return
-        tree = assemble_project(self.state.ir, self.state.scaffold)
+        tree = assemble_project(self.state.ir, self.state.scaffold, enforce_hooks=True)
         report = write_tree(tree, Path(dest), strategy=MergeStrategy.SKIP_EXISTING)
         self._show_export_done(dest, report)
 

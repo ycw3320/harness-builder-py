@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass
 
 from ..ir.schema import HarnessIR, by_kind
+from .hook_codegen import with_guard
 
 _ENV_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
 
@@ -35,7 +36,13 @@ def _ensure_nl(s: str) -> str:
     return s if s.endswith("\n") else s + "\n"
 
 
-def export_ir(ir: HarnessIR) -> list[VirtualFile]:
+def export_ir(ir: HarnessIR, enforce_hooks: bool = False) -> list[VirtualFile]:
+    """IR → 산출 파일 목록.
+
+    enforce_hooks(3-A, opt-in): True 면 deny 훅의 `path_glob` 을 실제 exit-2 가드로 코드젠해
+    "시뮬에서 막힌 것 = 산출물에서 막힘" 을 성립시킨다. **기본값 False 는 기존 산출 바이트를
+    그대로 유지**한다(ADR-0012 frozen 골든 보호 — 신규 코어 ADD 는 opt-in 파라미터 형태).
+    """
     enabled = [c for c in ir.components if c.enabled]
     files: list[VirtualFile] = []
     referenced_env: set[str] = set()
@@ -81,7 +88,8 @@ def export_ir(ir: HarnessIR) -> list[VirtualFile]:
             hook_map.setdefault(h.event, []).append(
                 {"matcher": h.matcher_tool, "hooks": [{"type": "command", "command": command}]}
             )
-            files.append(VirtualFile(command, _ensure_nl(h.script_body)))
+            script = with_guard(h) if enforce_hooks else h.script_body
+            files.append(VirtualFile(command, _ensure_nl(script)))
         settings["hooks"] = hook_map
 
     if settings.get("permissions") or settings.get("hooks"):

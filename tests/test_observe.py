@@ -67,9 +67,10 @@ def test_describe_windows_absolute_path_matches():
         ),
     )
     assert ".env 쓰기 차단" in text and cid == "guard-hook-secrets"
-    # cwd 밖 절대경로는 상대화 불가 → 시뮬 좌표계(상대 glob) 기준으로 매칭 없음이 정직한 재현.
-    # (참고: 코어 glob_to_regexp 는 '**/'가 한 단계 디렉터리로 축소되는 잠복 결함이 있어
-    #  다단 중첩 경로를 과소 매칭한다 — frozen 코어라 티어 3-A 에서 수정 예정, ROADMAP 기록.)
+    # 3-A 이후: cwd 밖 절대경로(다단 중첩)도 매칭된다. 예전에는 glob_to_regexp 의 `**` 축소
+    # 결함으로 매칭이 없었고 그것을 '정직한 재현'으로 적어 뒀지만, 실측하면 **생성된 훅이
+    # 실제로 이 경로를 차단**한다(exit 2) — 매칭 없음이야말로 런타임과 어긋난 재현이었다.
+    # 지금은 시뮬·산출물·런타임이 같은 판정을 낸다(tests/test_hook_codegen.py 가 3자 정합 고정).
     _text2, cid2 = describe_event(
         ir,
         _ev(
@@ -77,7 +78,7 @@ def test_describe_windows_absolute_path_matches():
             {"tool_name": "Write", "tool_input": {"file_path": "D:\\other\\place\\.env.local"}},
         ),
     )
-    assert cid2 is None
+    assert cid2 == "guard-hook-secrets"
 
 
 def test_install_idempotent_and_remove(tmp_path):

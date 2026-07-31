@@ -544,7 +544,7 @@ def lint_items(state: BuilderState) -> list[LintVM]:
 
 def export_paths(state: BuilderState) -> list[str]:
     """산출 파일 경로 목록 (생성될 트리 미리보기)."""
-    tree = assemble_project(state.ir, state.scaffold)
+    tree = assemble_project(state.ir, state.scaffold, enforce_hooks=True)
     return [vf.path for vf in tree]
 
 
@@ -554,7 +554,10 @@ def assembled_files(state: BuilderState) -> list[tuple[str, str]]:
     발견 C 대응: prose/CLAUDE.md 는 시뮬 효과가 0이라 지침만 쓴 초심자는 빈 시뮬 화면을 봤다.
     assemble 된 실제 파일 내용을 그대로 노출해 '무엇이 만들어지나'를 조립 중에 보게 한다.
     """
-    return [(vf.path, vf.content) for vf in assemble_project(state.ir, state.scaffold)]
+    return [
+        (vf.path, vf.content)
+        for vf in assemble_project(state.ir, state.scaffold, enforce_hooks=True)
+    ]
 
 
 @dataclass(frozen=True)
