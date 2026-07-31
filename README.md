@@ -14,16 +14,20 @@ Claude Code 하네스(`.claude/` + `CLAUDE.md`)를 GUI로 구성해 **로컬 프
 
 > TypeScript 웹 버전([ycw3320/harness-builder](https://github.com/ycw3320/harness-builder))을 Python 데스크톱으로 전환. 웹의 로컬 파일시스템 제약을 해소하고 "내려받아 즉시 진행"을 네이티브로 구현.
 
-## 현재 상태 — PM6 완료 (pytest 71 GREEN)
+## 현재 상태 — PM9 + 직관성 강화 (pytest 173 GREEN)
 
-PM1~5(코어·Qt 셸·동적 CRUD·프리셋·인앱 LLM·역import·exe 패키징)에 더해 **PM6 초심자 직관화** 완료:
-랜딩(소개) 페이지 → **"하네스 없으면 ↔ 지금" before/after 시뮬 시연**(규칙 토글로 차단을 직접 꺼보는 체감→정의 아하) →
-용어 2단 풀이(쉬운 말+호버) → export "다음 단계" 가이드. 한글 렌더는 **Pretendard 번들**(OFL)로 통일.
-코어 산출물은 TS 버전과 **바이트 단위 동일**(골든 게이트).
+PM1~6(코어·Qt 셸·동적 CRUD·프리셋·인앱 LLM·역import·exe 패키징·초심자 직관화)에 더해:
+- **PM7** 통합 `.harness.json`(저장=공유) + lint 보안 룰팩 + 성숙도 Lv0~4 (골든 게이트 2계층화 선행)
+- **PM8** QuickStart — 질문 3개로 하네스 초안 생성
+- **PM9** 라이브 관측 — 공식 hooks 관측 채널 + 실행 타임라인(실 CC 세션에서 실측 검증)
+- **직관성 강화** — 브랜드 '버클' + **MCP 카탈로그 픽커**·**권한 패턴 조립기**·**훅 카탈로그**(문법 없이 고르면 자동 완성) + 우패널 '지금 할 일' 재구조화
+
+핵심 아하는 그대로: 랜딩 → **"하네스 없으면 ↔ 지금" before/after 시뮬 시연**(체감→정의) → 용어 2단 풀이 → export "다음 단계" 가이드.
+한글 렌더는 **Pretendard 번들**(OFL). 코어 산출물은 TS 버전과 **바이트 단위 동일**(골든 게이트).
 
 ## 다른 PC에서 시작하기 (Quick Start)
 
-> Windows 11 + Python 3.11+ 기준. 저장소는 Private(ycw3320 계정) — clone 시 GitHub 인증 필요.
+> Windows 11 + Python 3.11+ 기준. 저장소는 Public(MIT) — 별도 인증 없이 clone 가능.
 
 ```powershell
 # 1. 클론
@@ -97,4 +101,11 @@ python -m pytest
 - **PM4** ✅ PyInstaller 패키징(`dist/HarnessBuilder.exe`)
 - **PM5** ✅ 완성도 미터 + 프리셋 5종 + 강제수준 사다리 + 온보딩 + 역import
 - **PM6** ✅ 초심자 직관화 — 랜딩·before/after 시뮬 시연·체감→정의 아하·용어 풀이·Pretendard 번들
-- **PM7(예정)** 통합 하네스 파일(.harness.json 저장=공유) + lint 보안 룰팩 + 성숙도 레벨 (골든 게이트 2계층화 선행)
+- **PM7** ✅ 통합 `.harness.json`(저장=공유) + lint 보안 룰팩 + 성숙도 Lv0~4 (골든 게이트 2계층화 선행)
+- **PM8** ✅ QuickStart — 질문 3개로 하네스 초안 생성
+- **PM9** ✅ 라이브 관측 — 공식 hooks 관측 채널 + 실행 타임라인(실 CC 세션 실측)
+- **직관성 강화** ✅ 브랜드 '버클'(안전벨트 버클 마크·테라코타 테마) + **문법 없이 조립하는 픽커 3종**:
+  - MCP 카탈로그 픽커(검증된 서버 고르면 command·args·env 자동 완성)
+  - **권한 패턴 조립기**(동작·도구·평문 입력 → `Bash(git push --force:*)` 같은 패턴 자동 생성 + 실시간 미리보기)
+  - **훅 카탈로그**(검증된 grep 기반 보호 훅 — 🛑 차단 `.env`·`.git/`·`.ssh/` 쓰기, ⚠️ 경고 `rm -rf`·force push·`curl\|sh`·`sudo`)
+- **다음(예정)** 실행–관측–개선 반복 루프 강화 · 하네스 품질 평가 지원 · 카드 여정 시각화 · MCP 원격(HTTP/OAuth)
