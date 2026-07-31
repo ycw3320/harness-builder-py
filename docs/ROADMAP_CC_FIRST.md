@@ -110,4 +110,13 @@ deny 훅 경고. 발견 A를 *탐지*하는 저비용 절반(근본 해결은 3-
 - [x] 2-C `hook-portability` — bash/sh/zsh shebang 훅 이식성 경고. **sec- 접두를 쓰지 않음**:
   플랫폼 무관하게 무조건 발화하므로 게이팅하면 macOS/Linux 도 Lv4 영구 불가. 대신 앱
   `lint_items` 가 이 PC 에 실행기가 있으면 흡수(코어=플랫폼 무관 사실, 앱=플랫폼 인지 표시).
-- [ ] 3-A/3-B/3-C (frozen, 승인 필요)
+- [x] **3-A 시뮬↔산출물↔런타임 정합 (2026-07-24, 사용자 승인 = 안 A opt-in)** — 계획서 `docs/PLAN_3A_PARITY.md`
+  - 3-A-1 `glob_to_regexp` `**` 축소 결함 수정 + `glob_to_pattern` 노출(ERE 호환 문법 = 단일 생성기).
+    **frozen 골든 바이트 불변**(사전 실측 — 골든 시나리오가 루트 `.env` 뿐).
+  - 3-A-2 `hook_codegen` 신설 — deny 훅의 `path_glob` 을 실제 exit-2 가드로 코드젠.
+    `export_ir/assemble_project(enforce_hooks=...)` **opt-in**(기본값 현행 유지 = ADR-0012 준수),
+    앱만 True. stdin 되먹임으로 사용자 본문의 `$(cat)` 보존(순진한 방식은 기존 훅을 무력화 — 실측).
+  - 3-A-3 `promote` 스텁: 가짜 차단을 만들지 않고 **실제 차단으로 가는 길**(경로 조건 → 자동 코드젠)을 안내.
+    미완 상태는 2-B `sec-hook-no-enforce` 가 계속 경고 + Lv4 보류.
+  - extended 골든 `export_enforced` 박제(생성 커밋 분리) + 대조 테스트 + 게이트 실효성 확인(변조 시 FAIL).
+- [ ] 3-B/3-C (코어 확장, 승인 필요)
