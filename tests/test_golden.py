@@ -47,3 +47,13 @@ def test_simulate_identical(golden):
 
 def test_lint_identical(golden):
     assert lint_ir(safety_first_preset("demo")) == golden("lint_preset")
+
+
+def test_export_enforced_identical(golden):
+    """3-A extended 골든 — frozen 은 기본 호출만 지키므로 opt-in 신 경로를 따로 회귀 보호한다.
+
+    (ADR-0012: 신규 코어 ADD 는 extended 계층에서 박제. 골든 이름은 프로젝트명 'golden' 기준.)
+    """
+    _assert_tree_identical(
+        export_ir(safety_first_preset("golden"), enforce_hooks=True), golden("export_enforced")
+    )

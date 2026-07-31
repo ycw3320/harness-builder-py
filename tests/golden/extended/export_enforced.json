@@ -1,0 +1,22 @@
+[
+  {
+    "path": ".claude/hooks/block-secrets.sh",
+    "content": "#!/usr/bin/env bash\n# [버클 자동 생성 가드] 경로 조건: **/.env*\n# 시뮬레이터와 똑같은 규칙으로 검사합니다 — 이 부분은 버클이 만들었습니다.\n__buckle_input=$(cat)\n__buckle_path=$(printf '%s' \"$__buckle_input\" | grep -oE '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' | head -1 | grep -oE '\"[^\"]*\"$' | tr -d '\"')\n__buckle_path=\"${__buckle_path//\\\\\\\\//}\"\n__buckle_path=\"${__buckle_path//\\\\//}\"\nif printf '%s' \"$__buckle_path\" | grep -qE '^(.*/)?\\.env[^/]*$'; then\n  echo \"차단: **/.env* 에 해당하는 경로에는 쓸 수 없습니다\" >&2\n  exit 2\nfi\n# ↓ 사용자가 작성한 본문 — 표준입력으로 payload 를 그대로 받습니다.\nprintf '%s' \"$__buckle_input\" | {\n# .env* 파일 쓰기 차단 — 시크릿 보호 (강제수준 3단: hook)\ninput=$(cat)\npath=$(printf '%s' \"$input\" | grep -oE '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' | head -1)\ncase \"$path\" in\n  *.env*) echo \"차단: .env 파일에는 쓸 수 없습니다 (시크릿 보호)\" >&2; exit 2;;\nesac\nexit 0\n}\n"
+  },
+  {
+    "path": ".claude/rules/secrets.md",
+    "content": "# 시크릿 취급 규칙\n\n- 비밀키·토큰·비밀번호는 `.env`(gitignore) 또는 비밀 저장소에만 둔다.\n- 설정 파일에는 `${VAR}` 플레이스홀더만 사용하고 실제 값을 넣지 않는다.\n- 발견 즉시 사용자에게 보고하고 회수한다.\n"
+  },
+  {
+    "path": ".claude/settings.json",
+    "content": "{\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(npm run test:*)\"\n    ],\n    \"ask\": [\n      \"Bash(git push --force:*)\"\n    ],\n    \"deny\": [\n      \"Bash(rm -rf:*)\"\n    ]\n  },\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Write|Edit\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \".claude/hooks/block-secrets.sh\"\n          }\n        ]\n      }\n    ]\n  }\n}\n"
+  },
+  {
+    "path": "CLAUDE.md",
+    "content": "# golden — 프로젝트 지침\n\n## 프로젝트 개요\n\n<!-- 프로젝트 스택·도메인·빌드 명령·명명 규칙을 여기에 기술하세요. -->\n"
+  },
+  {
+    "path": "_global/CLAUDE.md",
+    "content": "<!-- 이 파일 내용을 ~/.claude/CLAUDE.md 에 병합하세요 (전역 지침) -->\n\n# 전역 지침\n\n## 언어·보안 기본 자세\n\n- 모든 출력은 한국어로 작성한다.\n- 자격 증명·API 키·토큰을 코드/커밋/로그에 남기지 않는다.\n- 파일 삭제·덮어쓰기 등 비가역 작업 전에는 먼저 확인한다.\n"
+  }
+]

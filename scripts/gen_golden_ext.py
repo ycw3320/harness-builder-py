@@ -15,10 +15,25 @@ from pathlib import Path
 
 EXT = Path(__file__).resolve().parent.parent / "tests" / "golden" / "extended"
 
+
+def _export_enforced() -> object:
+    """3-A: enforce_hooks=True 경로(앱이 실제로 쓰는 산출물)를 박제.
+
+    frozen 은 기본 호출(enforce_hooks=False)만 지키므로, opt-in 신 경로는 여기서 회귀 보호한다.
+    """
+    from harness_core.export.export_ir import export_ir
+    from harness_core.ir.presets import safety_first_preset
+
+    return [
+        {"path": f.path, "content": f.content}
+        for f in export_ir(safety_first_preset("golden"), enforce_hooks=True)
+    ]
+
+
 # name → 생성 함수. 신규 코어 ADD 가 골든을 요구하면 여기에 등록한다.
-# 예: "lint_security_preset":
-#     lambda: lint_ir(safety_first_preset("golden"), rulesets=("core", "security"))
-GENERATORS: dict[str, Callable[[], object]] = {}
+GENERATORS: dict[str, Callable[[], object]] = {
+    "export_enforced": _export_enforced,
+}
 
 
 def main() -> None:
