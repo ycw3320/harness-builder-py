@@ -102,6 +102,24 @@ def test_maturity_withholds_lv4_when_runtime_missing(monkeypatch):
     assert m_bad.next_hint and "bash" in m_bad.next_hint
 
 
+def test_lint_items_absorbs_portability_when_runtime_present(monkeypatch):
+    """2-C ↔ 1-C 분담: 코어는 무조건 이식성 경고, 앱은 실행기가 있으면 흡수(첫 화면 깨끗).
+
+    흡수하지 않으면 bash 가 있는 정상 환경에서도 프리셋 첫 화면이 늘 경고로 시작해
+    시드 신뢰가 깎이고 진짜 위험 신호가 묻힌다.
+    """
+    import harness_app.view_model as vmod
+    from harness_app.view_model import lint_items
+
+    st = BuilderState("demo", preset="safety-first")
+
+    monkeypatch.setattr(vmod, "check_hook_runtimes", lambda ir: _fake_rt(ok=True))
+    assert "hook-portability" not in {i.code for i in lint_items(st)}
+
+    monkeypatch.setattr(vmod, "check_hook_runtimes", lambda ir: _fake_rt(ok=False))
+    assert "hook-portability" in {i.code for i in lint_items(st)}
+
+
 def _fake_rt(ok: bool):
     from harness_app.runtime_check import HookRuntimeVM
 

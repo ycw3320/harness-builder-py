@@ -19,14 +19,32 @@ _INJECTION_PATTERNS = [
     (re.compile(r"wget[^\n]*\|\s*(ba)?sh"), "wget 결과를 곧바로 셸로 실행"),
     (re.compile(r"eval\s+[\"']?\$"), "변수 내용을 eval 로 실행"),
     (re.compile(r"base64\s+(-d|--decode)"), "base64 로 숨긴 내용을 해독"),
+    # 2-A: PowerShell·Python 인라인 실행 — 구체 패턴을 먼저 둬야 메시지가 정확해진다.
+    (
+        re.compile(r"(?i)(invoke-webrequest|curl|wget)[^\n]*\|\s*(iex|invoke-expression)"),
+        "내려받은 내용을 곧바로 PowerShell 로 실행",
+    ),
+    (re.compile(r"(?i)\b(iex|invoke-expression)\b"), "PowerShell iex 로 문자열을 코드로 실행"),
+    (re.compile(r"\bpython[0-9.]*\s+-c\b"), "python -c 로 인라인 코드 실행"),
 ]
 _SECRET_PATTERNS = [
     re.compile(r"sk-ant-[A-Za-z0-9_-]{8,}"),
     re.compile(r"ghp_[A-Za-z0-9]{20,}"),
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"xox[bap]-[A-Za-z0-9-]{10,}"),
+    # 2-A: 벤더 확장 — OpenAI(프로젝트/레거시)·Google·PEM 개인키.
+    re.compile(r"sk-proj-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"sk-[A-Za-z0-9]{32,}"),
+    re.compile(r"AIza[0-9A-Za-z_-]{35}"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
 ]
 _MCP_OVERLOAD_THRESHOLD = 5
+
+# 2-C: POSIX 셸 shebang 판별(첫 줄만) — Windows 에서 git-bash/WSL 없으면 미실행되는 훅 표면화.
+# `pwsh` 가 `sh` 로 뭉개지지 않도록 경로 구분자 뒤 토큰만 매칭한다(`\S*[/\\\s]` 뒤).
+_POSIX_SHELL_SHEBANG = re.compile(r"^#!\S*[/\\\s](bash|sh|zsh)(\.exe)?\b")
+# 2-B: deny 훅이 실제로 차단하려면 exit 2(PreToolUse 차단 규약)가 있어야 한다.
+_EXIT_2 = re.compile(r"\bexit\s+2\b")
 
 
 def parse_pattern(pattern: str) -> dict:
@@ -48,6 +66,10 @@ def _text_fields(c) -> list[str]:
         return [c.description, c.system_prompt]
     if c.kind == "hook":
         return [c.script_body]
+    # 2-A: MCP 실행 명령·인자도 스캔(예: --api-key 뒤 실제 키). env 는 core 규칙
+    # inline-secret 이 이미 error 로 잡으므로 중복 보고를 피해 제외한다.
+    if c.kind == "mcp-server":
+        return [c.command, *c.args]
     return []
 
 
@@ -90,6 +112,34 @@ def _security_findings(enabled: list) -> list[dict]:
                 )
                 break  # hook 당 1건
 
+        # 2-B: '금지(deny)'로 표시됐지만 스크립트가 실제로 차단하지 않는 훅(발견 A 탐지).
+        # PreToolUse 차단은 exit 2 규약이라, exit 2 가 없으면 화면의 '차단'이 산출물에서 안 지켜진다.
+        if h.action == "deny" and not _EXIT_2.search(h.script_body):
+            findings.append(
+                {
+                    "level": "warning",
+                    "code": "sec-hook-no-enforce",
+                    "message": f'hook "{h.title}" 은 금지로 표시됐지만 스크립트가 실제로 막지 않아요 — 차단하려면 막을 때 exit 2 로 끝내야 합니다',
+                    "componentId": h.id,
+                }
+            )
+
+        # 2-C: bash/sh 훅은 Windows 에 git-bash/WSL 이 없으면 조용히 미실행된다(발견 B).
+        # 코어 lint 는 플랫폼을 모르므로 '이식성 주의'까지만 — 실제 이 PC 판정은 앱의 1-C precheck.
+        # sec- 접두를 쓰지 않는 이유: 모든 플랫폼에서 무조건 발화하므로 성숙도 게이트에 걸면
+        # macOS/Linux 에서도 Lv4 가 영구 불가가 된다(게이팅은 환경을 아는 앱 계층 책임).
+        if _POSIX_SHELL_SHEBANG.match(
+            (h.script_body or "").splitlines()[0] if h.script_body else ""
+        ):
+            findings.append(
+                {
+                    "level": "warning",
+                    "code": "hook-portability",
+                    "message": f'hook "{h.title}" 은 bash 로 작성돼 있어요 — Windows 에서는 Git Bash(또는 WSL)가 있어야 실행됩니다. 없으면 이 차단은 동작하지 않아요',
+                    "componentId": h.id,
+                }
+            )
+
     for c in enabled:
         for text in _text_fields(c):
             if any(p.search(text) for p in _SECRET_PATTERNS):
@@ -103,7 +153,41 @@ def _security_findings(enabled: list) -> list[dict]:
                 )
                 break
 
+    # 2-A: 죽은 규칙 — 더 넓은 deny 에 가려 효과가 없는 allow(우선순위 deny > ask > allow).
+    # 완전히 같은 패턴이 allow/deny 양쪽에 있는 경우는 core 의 permission-conflict(error)가
+    # 이미 잡으므로 여기서는 제외해 중복 보고를 피한다.
+    denies = [(x, parse_pattern(x.pattern)) for x in perms if x.action == "deny"]
+    for a in [x for x in perms if x.action == "allow"]:
+        ap = parse_pattern(a.pattern)
+        for d, dp in denies:
+            if d.pattern == a.pattern or dp["tool"] != ap["tool"]:
+                continue
+            if dp["prefix"] == "" or ap["prefix"].startswith(dp["prefix"]):
+                findings.append(
+                    {
+                        "level": "warning",
+                        "code": "sec-dead-rule",
+                        "message": f'허용 "{a.pattern}" 은 더 넓은 금지 "{d.pattern}" 에 가려 효과가 없어요 — 금지가 항상 우선합니다',
+                        "componentId": a.id,
+                    }
+                )
+                break  # allow 당 1건
+
     mcps = by_kind(enabled, "mcp-server")
+    # 2-A: MCP 실행 명령·인자의 의심 패턴(외부에서 받은 하네스의 임의 명령 실행 경로).
+    for s in mcps:
+        joined = " ".join([s.command, *s.args])
+        for pat, what in _INJECTION_PATTERNS:
+            if pat.search(joined):
+                findings.append(
+                    {
+                        "level": "warning",
+                        "code": "sec-mcp-suspicious",
+                        "message": f'외부 도구 "{s.server_name}" 의 실행 명령에 의심 패턴({what})이 있어요 — 연결 전에 명령·인자를 꼭 확인하세요',
+                        "componentId": s.id,
+                    }
+                )
+                break
     if len(mcps) > _MCP_OVERLOAD_THRESHOLD:
         findings.append(
             {

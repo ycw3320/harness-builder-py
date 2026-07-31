@@ -533,10 +533,13 @@ def maturity(state: BuilderState) -> MaturityVM:
 
 def lint_items(state: BuilderState) -> list[LintVM]:
     # PM7-S3: 앱 표시는 core+security — 실행 전 보안 검증(전부 warning, export 미차단)
-    return [
-        LintVM(level=f["level"], code=f["code"], message=f["message"])
-        for f in lint_ir(state.ir, rulesets=("core", "security"))
-    ]
+    findings = lint_ir(state.ir, rulesets=("core", "security"))
+    # 2-C ↔ 1-C 역할 분담: 코어는 플랫폼을 모르므로 bash 훅이면 무조건 이식성 경고를 낸다.
+    # 앱은 이 PC 를 아니까, 실행기가 실제로 있으면 그 경고를 흡수한다 — 그렇지 않으면 프리셋
+    # 첫 화면이 늘 경고로 시작해(시드 신뢰 훼손) 정작 진짜 위험 신호가 묻힌다.
+    if check_hook_runtimes(state.ir).ok:
+        findings = [f for f in findings if f["code"] != "hook-portability"]
+    return [LintVM(level=f["level"], code=f["code"], message=f["message"]) for f in findings]
 
 
 def export_paths(state: BuilderState) -> list[str]:

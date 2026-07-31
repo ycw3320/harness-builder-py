@@ -99,5 +99,12 @@ deny 훅 경고. 발견 A를 *탐지*하는 저비용 절반(근본 해결은 3-
 - [x] 1-C 크로스플랫폼 precheck — `runtime_check.py`(shebang→실행기 판정, 단어경계 매칭으로 pwsh/zsh≠sh) +
   성숙도 Lv4 **보류**(bash 부재 시 차단 훅 미실행 → '검증됨' 거짓 안전 차단) + 완료 다이얼로그 ③ 문구
   단정→조건부 강등 + 상태 카드 경고. **발견 B의 안전한 절반 완료**(프리셋 훅 OS별 교체는 티어2 2-C).
-- [ ] 2-A/2-B/2-C (extended-ADD)
+- [x] 2-A 보안 lint 강화 — 벤더 시크릿(OpenAI sk-proj/레거시·Google AIza·PEM) + PowerShell/Python
+  인젝션(iex·Invoke-WebRequest|iex·python -c) + MCP command/args 스캔(`sec-mcp-suspicious`,
+  시크릿 스캔에 mcp 포함) + 죽은 규칙(`sec-dead-rule`, 넓은 deny 에 가린 allow)
+- [x] 2-B `sec-hook-no-enforce` — deny 표시인데 스크립트에 `exit 2` 가 없는 훅 경고(발견 A **탐지**,
+  근본 해결은 3-A). sec- 접두라 성숙도 Lv4 를 게이팅한다.
+- [x] 2-C `hook-portability` — bash/sh/zsh shebang 훅 이식성 경고. **sec- 접두를 쓰지 않음**:
+  플랫폼 무관하게 무조건 발화하므로 게이팅하면 macOS/Linux 도 Lv4 영구 불가. 대신 앱
+  `lint_items` 가 이 PC 에 실행기가 있으면 흡수(코어=플랫폼 무관 사실, 앱=플랫폼 인지 표시).
 - [ ] 3-A/3-B/3-C (frozen, 승인 필요)
