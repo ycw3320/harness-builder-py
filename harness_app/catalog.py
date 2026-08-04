@@ -211,24 +211,40 @@ class HookCatalogEntry:
 
 # --- 스크립트 본문(로컬 exit-code 검증 완료본과 바이트 동일) ---
 
+# 파일경로 '값'만 뽑는다 — 추출식 조각째로 매칭하면 값 안에 우연히 든 문자열까지 걸려
+# `config/dev.environment.json` 같은 정상 파일이 막힌다(적대 검증 확정 과차단).
+# notebook_path 도 검사한다: matcher(Write|Edit)에 NotebookEdit 이 걸리기 때문.
+# JSON 이스케이프를 인식해 경로에 따옴표가 있어도 중간에 끊기지 않는다.
+_EXTRACT_PATH_VALUE = (
+    "val=$(printf '%s' \"$input\" "
+    '| grep -oE \'"(file_path|notebook_path)"[[:space:]]*:[[:space:]]*"([^"\\\\]|\\\\.)*"\' '
+    "| head -1 | sed -E 's/^.*:[[:space:]]*\"//; s/\"$//')"
+)
+
 _HOOK_ENV_WRITE = "\n".join(
     [
         "#!/usr/bin/env bash",
         "# .env* 파일 쓰기 차단 — 시크릿 보호",
         "input=$(cat)",
-        'path=$(printf \'%s\' "$input" | grep -oE \'"file_path"[[:space:]]*:[[:space:]]*"[^"]*"\' | head -1)',
-        'case "$path" in',
-        '  *.env*) echo "차단: .env 파일에는 쓸 수 없습니다 (시크릿 보호). 값은 이미 만들어진 .env 에 직접 넣으세요." >&2; exit 2;;',
+        # 추출식 전체가 아니라 **경로 값만** 뽑는다. 조각째로 `*.env*` 를 대면
+        # `\"file_path\": \"config/dev.environment.json\"` 처럼 값 안에 .env 가 우연히 들어간
+        # 정상 파일까지 막힌다(적대 검증 확정 과차단).
+        _EXTRACT_PATH_VALUE,
+        r'path="${val//\\\\//}"',
+        r'path="${path//\\//}"',
+        # 마지막 조각(파일명)이 .env 로 시작할 때만 차단 — 대소문자 무시(Windows·macOS 는
+        # `.ENV` 가 같은 파일). `.env.example` 류 템플릿은 비밀값이 아니고 버클이 직접
+        # 만들어 배포하므로 제외한다.
+        'name="${path##*/}"',
+        'lower=$(printf \'%s\' "$name" | tr "[:upper:]" "[:lower:]")',
+        'case "$lower" in',
+        "  *.example|*.sample|*.template|*.md) exit 0;;",
+        "esac",
+        'case "$lower" in',
+        '  .env|.env.*) echo "차단: .env 파일에는 쓸 수 없습니다 (시크릿 보호). 값은 이미 만들어진 .env 에 직접 넣으세요." >&2; exit 2;;',
         "esac",
         "exit 0",
     ]
-)
-
-# .git/·.ssh/ 훅은 파일경로 '값'만 뽑아(백슬래시→슬래시 정규화) 디렉터리 경계로 정확 판정
-# — .gitignore/.github 등 유사 이름 오탐 방지.
-_EXTRACT_PATH_VALUE = (
-    'val=$(printf \'%s\' "$input" | grep -oE \'"file_path"[[:space:]]*:[[:space:]]*"[^"]*"\''
-    " | head -1 | grep -oE '\"[^\"]*\"$' | tr -d '\"')"
 )
 
 _HOOK_GIT_DIR = "\n".join(
@@ -239,6 +255,8 @@ _HOOK_GIT_DIR = "\n".join(
         _EXTRACT_PATH_VALUE,
         r'path="${val//\\\\//}"',
         r'path="${path//\\//}"',
+        # 대소문자 무시 FS(Windows·macOS)에서 .GIT/.SSH 로 우회되지 않게 소문자로 비교.
+        'path=$(printf \'%s\' "$path" | tr "[:upper:]" "[:lower:]")',
         'case "/$path" in',
         '  */.git/*) echo "차단: .git 내부 파일은 직접 수정할 수 없습니다 (git 명령을 사용하세요)." >&2; exit 2;;',
         "esac",
@@ -254,6 +272,8 @@ _HOOK_SSH_KEY = "\n".join(
         _EXTRACT_PATH_VALUE,
         r'path="${val//\\\\//}"',
         r'path="${path//\\//}"',
+        # 대소문자 무시 FS(Windows·macOS)에서 .GIT/.SSH 로 우회되지 않게 소문자로 비교.
+        'path=$(printf \'%s\' "$path" | tr "[:upper:]" "[:lower:]")',
         'case "/$path" in',
         '  */.ssh/*) echo "차단: ~/.ssh 안의 키·설정은 수정할 수 없습니다 (자격증명 보호)." >&2; exit 2;;',
         "esac",

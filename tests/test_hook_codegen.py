@@ -105,7 +105,8 @@ def test_parity_sim_export_runtime(path, blocked, tmp_path):
 def test_user_body_still_receives_stdin(tmp_path):
     """가드가 stdin 을 삼켜 사용자 본문의 $(cat) 이 비면 기존 훅이 통째로 무력화된다.
 
-    본문만으로 차단되는 경로(가드 정규식엔 안 걸리는)를 써서 되먹임이 실제로 되는지 본다.
+    본문이 payload 를 실제로 받았는지는 2 가 아닌 고유 종료코드로 확인한다
+    (2 는 아래 test_path_glob_is_authoritative_scope 가 다루는 '범위 밖 차단'이라 강등된다).
     """
     base = safety_first_preset("demo")
     hook = create_component("hook", "guardrails").model_copy(
@@ -117,7 +118,7 @@ def test_user_body_still_receives_stdin(tmp_path):
                 "#!/usr/bin/env bash\n"
                 "input=$(cat)\n"
                 'if [ -z "$input" ]; then exit 9; fi\n'  # stdin 이 비면 9
-                'case "$input" in *secret.txt*) exit 2;; esac\n'
+                'case "$input" in *secret.txt*) exit 7;; esac\n'  # 본문이 payload 를 봤다는 신호
                 "exit 0\n"
             ),
         }
@@ -125,7 +126,23 @@ def test_user_body_still_receives_stdin(tmp_path):
     ir = HarnessIR(meta=base.meta, components=[hook])
     script = _script_of(ir, enforce=True)
     assert _run(script, "docs/readme.md", tmp_path) == 0  # 통과(9 면 stdin 유실)
-    assert _run(script, "secret.txt", tmp_path) == 2  # 본문 판정이 살아있다
+    assert _run(script, "secret.txt", tmp_path) == 7  # 본문이 payload 를 받았고 종료코드도 전파
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash 미존재")
+def test_path_glob_is_authoritative_scope(tmp_path):
+    """경로 조건 = 선언된 범위. 범위 밖에서 본문이 차단하면 화면(시뮬)과 어긋난다.
+
+    실제로 프리셋 본문의 `case "$path" in *.env*)` 가 `config/dev.environment.json` 류를
+    막아 시뮬(통과)과 정반대 판정을 냈다(적대 검증 확정). 범위를 권위로 삼아 통과시킨다.
+    """
+    ir = safety_first_preset("demo")
+    script = _script_of(ir, enforce=True)
+    for path in ("config/dev.environment.json", "src/parse.environment.ts", "release.env.notes.md"):
+        assert _run(script, path, tmp_path) == 0, path
+        assert simulate(ir, {"tool": "Write", "path": path, "label": path})["outcome"] == "allowed"
+    # 범위 안은 그대로 차단
+    assert _run(script, "sub/dir/.env", tmp_path) == 2
 
 
 # --- 적대 검증(2026-07-24)이 확정한 공격 벡터 회귀 --------------------------------

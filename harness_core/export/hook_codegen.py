@@ -117,6 +117,16 @@ def with_guard(hook) -> str:
         out.append("printf '%s' \"$__buckle_input\" | {")
         out.extend(lines)
         out.append("}")
+        # 경로 조건이 곧 이 훅의 '선언된 범위'다. 위 가드를 통과했다는 건 범위 밖이라는 뜻이므로,
+        # 본문이 여기서 차단하면 화면(시뮬)의 '통과' 판정과 어긋난다 — 실제로 프리셋 본문의
+        # `case "$path" in *.env*)` 가 `config/dev.environment.json` 류를 막아 정반대 판정을
+        # 냈다(적대 검증 확정). 선언 범위를 권위로 삼아 범위 밖 차단은 통과시킨다.
+        out.append("__buckle_rc=$?")
+        out.append('if [ "$__buckle_rc" = "2" ]; then')
+        out.append('  echo "참고: 경로 조건 밖이라 통과시킵니다(범위는 위 가드가 정합니다)" >&2')
+        out.append("  exit 0")
+        out.append("fi")
+        out.append('exit "$__buckle_rc"')
     else:
         out.append("exit 0")
     return "\n".join(out)

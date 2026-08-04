@@ -51,6 +51,24 @@ _CASES = [
     ("env-write-block", _w("/home/u/proj/.env.local"), 2),
     ("env-write-block", _w("/home/u/proj/src/app.js"), 0),
     ("env-write-block", _w("/home/u/proj/environment.ts"), 0),
+    # 과차단 회귀(적대 검증) — 값 안에 우연히 '.env' 가 든 정상 파일은 막지 않는다
+    ("env-write-block", _w("config/dev.environment.json"), 0),
+    ("env-write-block", _w("src/parse.environment.ts"), 0),
+    ("env-write-block", _w("docs/.envelope-design.md"), 0),
+    # 템플릿은 비밀값이 아니고 버클이 직접 만들어 배포한다 → 허용
+    ("env-write-block", _w("/home/u/proj/.env.example"), 0),
+    ("env-write-block", _w("/home/u/proj/.env.sample"), 0),
+    # 대소문자 우회 방지(Windows·macOS 는 .ENV 가 같은 파일)
+    ("env-write-block", _w("/home/u/proj/.ENV"), 2),
+    ("env-write-block", _w("/home/u/proj/.Env.local"), 2),
+    ("git-dir-protect", _w("/home/u/proj/.GIT/config"), 2),
+    ("ssh-key-protect", _w("/home/u/.SSH/id_rsa"), 2),
+    # NotebookEdit 은 경로 키가 notebook_path (matcher Write|Edit 에 걸린다)
+    (
+        "env-write-block",
+        {"tool_name": "NotebookEdit", "tool_input": {"notebook_path": ".env"}},
+        2,
+    ),
     # git-dir-protect (deny) — .gitignore/.github 오탐 없음, win 경로 포함
     ("git-dir-protect", _w("/home/u/proj/.git/config"), 2),
     ("git-dir-protect", _w(".git/hooks/pre-commit"), 2),
